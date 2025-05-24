@@ -1,0 +1,6 @@
+﻿verry.function.tan
+==================
+
+.. currentmodule:: verry.function
+
+.. autofunction:: tan

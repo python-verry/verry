@@ -1,0 +1,6 @@
+﻿verry.integrate.doubletontracker
+================================
+
+.. currentmodule:: verry.integrate
+
+.. autofunction:: doubletontracker

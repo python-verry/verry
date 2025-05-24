@@ -1,0 +1,6 @@
+﻿verry.integrate.seriessolution
+==============================
+
+.. currentmodule:: verry.integrate
+
+.. autofunction:: seriessolution

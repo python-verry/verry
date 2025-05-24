@@ -1,0 +1,6 @@
+﻿verry.autodiff.deriv
+====================
+
+.. currentmodule:: verry.autodiff
+
+.. autofunction:: deriv
