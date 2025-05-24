@@ -3,7 +3,6 @@ import fractions
 import math
 import re
 import sys
-from typing import assert_never
 
 from verry import function as vrf
 from verry.interval import _floatoperator  # type: ignore
@@ -79,10 +78,12 @@ class FloatConverter(Converter[float]):
             shift -= 1
 
         div, mod = divmod(frac.numerator, frac.denominator)
-        tmp = float(div)
 
         if is_negative:
-            tmp *= -1.0
+            div = -div
+            mod = -mod
+
+        tmp = float(div)
 
         if shift > 0:
             for _ in range(shift):
@@ -91,18 +92,15 @@ class FloatConverter(Converter[float]):
             for _ in range(-shift):
                 tmp *= 2.0
 
-        if mod == 0:
-            return tmp
-
         match rounding:
-            case RoundingMode.ROUND_CEILING:
+            case RoundingMode.ROUND_CEILING if mod > 0:
                 return math.nextafter(tmp, float("inf"))
 
-            case RoundingMode.ROUND_FLOOR:
+            case RoundingMode.ROUND_FLOOR if mod < 0:
                 return math.nextafter(tmp, -float("inf"))
 
-            case _ as unreachable:
-                assert_never(unreachable)
+            case _:
+                return tmp
 
     def fromint(self, value, rounding) -> float:
         if abs(value) <= 0x1FFFFFFFFFFFFF:
