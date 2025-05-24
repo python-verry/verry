@@ -1,0 +1,60 @@
+[project]
+name = "verry"
+version = "0.1.0"
+description = "An open-source package for verified computation written in Python."
+readme = "README.rst"
+authors = [{name = "Ryoga Iwanami", email = "iwanami.ryoga@akane.waseda.jp"}]
+dependencies = [
+    "mpmath>=1.3.0",
+    "numpy>=2.2.5",
+]
+requires-python = ">=3.13"
+license = {file = "LICENSE.txt"}
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: BSD License",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+[project.urls]
+homepage = "https://python-verry.github.io/verry"
+source = "https://github.com/python-verry/verry"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.15.0",
+    "pydata-sphinx-theme>=0.16.1",
+    "pytest>=8.3.5",
+    "ruff>=0.11.10",
+    "sphinx>=8.2.3",
+    "sphinx-design>=0.6.1",
+    "sphinx-favicon>=1.0.1",
+    "taskipy>=1.14.1",
+]
+
+[build-system]
+requires = [
+    "scikit-build-core>=0.11.3",
+    "pybind11>=2.13.6",
+]
+build-backend = "scikit_build_core.build"
+
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.cibuildwheel]
+archs = ["auto64"]
+build = "cp313-*"
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-pypy_x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+
+[tool.taskipy.tasks]
+docs = {cwd = "docs/", cmd = "uv run make html"}

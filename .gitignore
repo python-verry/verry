@@ -1,0 +1,17 @@
+__pycache__/
+.cache/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+build/
+dist/
+
+docs/_build/
+docs/build/
+docs/source/**/generated/
+
+.venv/
+venv/
+
+.vscode/
