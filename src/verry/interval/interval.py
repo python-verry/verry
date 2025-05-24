@@ -204,6 +204,9 @@ class Interval[T: SignedComparable](Scalar, ABC):
 
             inf = sup
 
+        if sup is None:
+            sup = inf
+
         match inf:
             case self.endtype():
                 self.inf = inf
@@ -219,10 +222,6 @@ class Interval[T: SignedComparable](Scalar, ABC):
 
             case _:
                 raise TypeError
-
-        if sup is None:
-            self.sup = self.inf
-            return
 
         match sup:
             case self.endtype():
