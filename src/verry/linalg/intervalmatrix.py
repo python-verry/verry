@@ -1,4 +1,5 @@
 import itertools
+from abc import ABC
 from collections.abc import Iterator, Sequence
 from types import EllipsisType
 from typing import Any, Literal, Self, Union, overload
@@ -47,13 +48,12 @@ class matiter(Iterator):
         return self._matrix[next(self._iter)]
 
 
-class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
+class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
     """Inf-sup type interval matrix.
 
     Parameters
     ----------
     a : IntervalMatrix | ndarray | Sequence
-    intvl : type[Interval]
 
     Attributes
     ----------
@@ -63,11 +63,11 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
         Supremum of the interval matrix.
     """
 
-    __slots__ = ("inf", "sup", "_intvl")
+    __slots__ = ("inf", "sup")
     __array_ufunc__ = None
+    interval: T1
     inf: npt.NDArray
     sup: npt.NDArray
-    _intvl: type[T1]
 
     @overload
     def __init__(
@@ -78,9 +78,6 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
             Sequence[T1 | T2 | float | int | str],
             Sequence[npt.NDArray | Sequence[T1 | T2 | float | int | str]],
         ],
-        /,
-        *,
-        intvl: type[T1],
     ): ...
 
     @overload
@@ -92,16 +89,9 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
         sup: npt.NDArray
         | Sequence[T2 | float | int | str]
         | Sequence[npt.NDArray | Sequence[T2 | float | int | str]],
-        *,
-        intvl: type[T1],
     ): ...
 
-    def __init__(self, inf, sup=None, *, intvl, **kwargs):
-        if not issubclass(intvl, Interval):
-            raise TypeError
-
-        self._intvl = intvl
-
+    def __init__(self, inf, sup=None, **kwargs):
         if kwargs.get("_skipcheck"):
             self.inf = inf
             self.sup = sup
@@ -121,8 +111,8 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
             self.sup = self._emptyarray(sup.shape)  # type: ignore
 
             for key in itertools.product(*(range(n) for n in inf.shape)):
-                self.inf[key] = intvl(inf[key]).inf  # type: ignore
-                self.sup[key] = intvl(sup[key]).sup  # type: ignore
+                self.inf[key] = self.interval(inf[key]).inf  # type: ignore
+                self.sup[key] = self.interval(sup[key]).sup  # type: ignore
 
                 if self.inf[key] > self.sup[key]:
                     raise ValueError
@@ -130,9 +120,6 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
             return
 
         if isinstance(inf, IntervalMatrix):
-            if inf._intvl is not intvl:
-                raise TypeError
-
             self.inf = self._emptyarray(inf.shape)  # type: ignore
             self.sup = self._emptyarray(inf.shape)  # type: ignore
 
@@ -151,17 +138,13 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
         self.sup = self._emptyarray(tmp.shape)  # type: ignore
 
         for key in itertools.product(*(range(n) for n in tmp.shape)):
-            x = intvl.ensure(tmp[key])
+            x = self.interval.ensure(tmp[key])
             self.inf[key] = x.inf
             self.sup[key] = x.sup
 
     @property
     def flat(self) -> flatiter[T1]:
         return flatiter(self)
-
-    @property
-    def interval(self) -> type[T1]:
-        return self._intvl
 
     @property
     def ndim(self) -> int:
@@ -203,61 +186,40 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
         return self.transpose()
 
     @classmethod
-    def empty(
-        cls, shape: int | tuple[int] | tuple[int, int], *, intvl: type[T1]
-    ) -> Self:
+    def empty(cls, shape: int | tuple[int] | tuple[int, int]) -> Self:
         """Return a new interval matrix of given shape, without initializing entries."""
-        if not issubclass(intvl, Interval):
-            raise TypeError
-
         inf = cls._emptyarray(shape)
         sup = inf.copy()
-        return cls(inf, sup, intvl=intvl, _skipcheck=True)  # type: ignore
+        return cls(inf, sup, _skipcheck=True)  # type: ignore
 
     @classmethod
-    def eye(cls, n: int, m: int | None = None, *, intvl: type[T1]) -> Self:
+    def eye(cls, n: int, m: int | None = None) -> Self:
         """Return a matrix with ones on the diagonal and zeros elsewhere."""
-        if not issubclass(intvl, Interval):
-            raise TypeError
-
         if m is None:
             m = n
 
-        result = cls.zeros((n, m), intvl=intvl)
-        ONE = result._intvl.operator.ONE
+        result = cls.zeros((n, m))
 
         for i in range(min(n, m)):
-            result.inf[i, i] = ONE
-            result.sup[i, i] = ONE
+            result.inf[i, i] = cls.interval.operator.ONE
+            result.sup[i, i] = cls.interval.operator.ONE
 
         return result
 
     @classmethod
-    def ones(
-        cls, shape: int | tuple[int] | tuple[int, int], *, intvl: type[T1]
-    ) -> Self:
+    def ones(cls, shape: int | tuple[int] | tuple[int, int]) -> Self:
         """Return a new interval matrix of given shape, filled with ones."""
-        if not issubclass(intvl, Interval):
-            raise TypeError
-
-        result = cls.empty(shape, intvl=intvl)
-        ONE = result._intvl.operator.ONE
-        result.inf[...] = ONE
-        result.sup[...] = ONE
+        result = cls.empty(shape)
+        result.inf[...] = cls.interval.operator.ONE
+        result.sup[...] = cls.interval.operator.ONE
         return result
 
     @classmethod
-    def zeros(
-        cls, shape: int | tuple[int] | tuple[int, int], *, intvl: type[T1]
-    ) -> Self:
+    def zeros(cls, shape: int | tuple[int] | tuple[int, int]) -> Self:
         """Return a new interval matrix of given shape, filled with zeros."""
-        if not issubclass(intvl, Interval):
-            raise TypeError
-
-        result = cls.empty(shape, intvl=intvl)
-        ZERO = result._intvl.operator.ZERO
-        result.inf[...] = ZERO
-        result.sup[...] = ZERO
+        result = cls.empty(shape)
+        result.inf[...] = cls.interval.operator.ZERO
+        result.sup[...] = cls.interval.operator.ZERO
         return result
 
     @classmethod
@@ -267,11 +229,11 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
     def copy(self) -> Self:
         """Return a copy of the interval matrix."""
         cls, inf, sup = type(self), self.inf.copy(), self.sup.copy()
-        return cls(inf, sup, intvl=self._intvl, _skipcheck=True)  # type: ignore
+        return cls(inf, sup, _skipcheck=True)  # type: ignore
 
     def empty_like(self) -> Self:
         """Return a new interval matrix with the same shape as `self`."""
-        return self.empty(self.shape, intvl=self._intvl)
+        return self.empty(self.shape)
 
     def diam(self) -> npt.NDArray:
         """Return component-wise upper bounds of the diameter."""
@@ -285,14 +247,11 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
     def flatten(self) -> Self:
         """Return a copy of the interval matrix collapsed into one dimension."""
         cls, inf, sup = type(self), self.inf.flatten(), self.sup.flatten()
-        return cls(inf, sup, intvl=self._intvl, _skipcheck=True)  # type: ignore
+        return cls(inf, sup, _skipcheck=True)  # type: ignore
 
     def interiorcontains(self, other: Self | npt.NDArray) -> bool:
         """Return ``True`` if the interior of the interval matrix contains `other`."""
-        cond1 = isinstance(other, np.ndarray)
-        cond2 = type(self) is type(other) and self._intvl is other._intvl  # type: ignore
-
-        if not (cond1 or cond2):
+        if not isinstance(other, np.ndarray | type(self)):
             raise TypeError
 
         if self.shape != other.shape:
@@ -307,10 +266,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
     def isdisjoint(self, other: Self | npt.NDArray) -> bool:
         """Return ``True`` if the interval matrix has no elements in common with
         `other`."""
-        cond1 = isinstance(other, np.ndarray)
-        cond2 = type(self) is type(other) and self._intvl is other._intvl  # type: ignore
-
-        if not (cond1 or cond2):
+        if not isinstance(other, np.ndarray | type(self)):
             raise TypeError
 
         if self.shape != other.shape:
@@ -320,7 +276,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
 
     def issubset(self, other: Self) -> bool:
         """Test whether every element in the interval matrix is in `other`."""
-        if not (type(self) is type(other) and self._intvl is other._intvl):
+        if type(self) is not type(other):
             return False
 
         if self.shape != other.shape:
@@ -330,7 +286,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
 
     def issuperset(self, other: Self) -> bool:
         """Test whether every element in `other` is in the interval matrix."""
-        if not (type(self) is type(other) and self._intvl is other._intvl):
+        if type(self) is not type(other):
             return False
 
         if self.shape != other.shape:
@@ -352,7 +308,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
 
     def ones_like(self) -> Self:
         """Return an interval matrix of ones with the same shape as `self`."""
-        return self.ones(self.shape, intvl=self._intvl)
+        return self.ones(self.shape)
 
     def rad(self) -> npt.NDArray:
         """Return component-wise upper bounds of the radius."""
@@ -365,58 +321,51 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
 
     def reshape(self, shape: int | tuple[int] | tuple[int, int]) -> Self:
         """Give a new shape to an interval matrix without changing its data."""
-        cls = type(self)
         inf = self.inf.reshape(shape, copy=True)
         sup = self.sup.reshape(shape, copy=True)
-        return cls(inf, sup, intvl=self._intvl, _skipcheck=True)  # type: ignore
+        return self.__class__(inf, sup, _skipcheck=True)  # type: ignore
 
     def transpose(self) -> Self:
         """Return a view of the transposed matrix."""
-        cls, inf, sup = type(self), self.inf.T, self.sup.T
-        return cls(inf, sup, intvl=self._intvl, _skipcheck=True)  # type: ignore
+        return self.__class__(self.inf.T, self.sup.T, _skipcheck=True)  # type: ignore
 
     def zeros_like(self) -> Self:
         """Return an interval matrix of zeros with the same shape as `self`."""
-        return self.zeros(self.shape, intvl=self._intvl)
+        return self.zeros(self.shape)
 
     def _verry_overload_(self, fun, *args, **kwargs):
-        cls = type(self)
-
         if fun is approx_inv:
-            return cls.__approx_inv(*args)
+            return self.__approx_inv()
 
         if fun is approx_norm:
-            return cls.__approx_norm(*args)
+            return self.__approx_norm()
 
         if fun is approx_qr:
-            return cls.__approx_qr(*args)
+            return self.__approx_qr()
 
         if fun is approx_solve:
             if args[0] is not self:
-                return cls(args[0], intvl=self._intvl).__approx_solve(args[1])
+                return self.__class__(args[0]).__approx_solve(args[1])
 
-            return cls.__approx_solve(*args)
+            return self.__approx_solve(args[1])
 
         if fun is inv:
-            return cls.__inv(*args)
+            return self.__inv()
 
         if fun is norm:
-            return cls.__norm(*args)
+            return self.__norm()
 
         if fun is solve:
             if args[0] is not self:
-                return cls(args[0], intvl=self._intvl).__solve(*args[1:])
+                return self.__class__(args[0]).__solve(*args[1:])
 
-            return cls.__solve(*args)
+            return self.__solve(*args[1:])
 
         return NotImplemented
 
     def __eq__(self, other) -> bool:
         if type(other) is not type(self):
             return NotImplemented
-
-        if other._intvl is not self._intvl:
-            return False
 
         return bool(np.all(other.inf == self.inf) and np.all(other.sup == self.sup))
 
@@ -440,12 +389,10 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
     ) -> Self: ...
 
     def __getitem__(self, key):
-        cls, inf, sup = type(self), self.inf[key], self.sup[key]
+        if isinstance(self.inf[key], np.ndarray):
+            return self.__class__(self.inf[key], self.sup[key], _skipcheck=True)  # type: ignore
 
-        if isinstance(inf, np.ndarray):
-            return cls(inf, sup, intvl=self._intvl, _skipcheck=True)  # type: ignore
-
-        return self._intvl(inf, sup)
+        return self.interval(self.inf[key], self.sup[key])
 
     @overload
     def __setitem__(
@@ -471,25 +418,25 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
                 self.sup[key] = value.sup
 
             case np.ndarray():
-                value = self.__class__(value, intvl=self._intvl)
+                value = self.__class__(value)
                 self.inf[key] = value.inf
                 self.sup[key] = value.sup
 
-            case self._intvl():
+            case self.interval():
                 self.inf[key] = value.inf
                 self.sup[key] = value.sup
 
-            case self._intvl.endtype():
+            case self.interval.endtype():
                 self.inf[key] = value
                 self.sup[key] = value
 
             case int():
-                value = self._intvl(value)
+                value = self.interval(value)
                 self.inf[key] = value.inf
                 self.sup[key] = value.sup
 
             case float():
-                value = self._intvl.converter.fromfloat(value)
+                value = self.interval.converter.fromfloat(value)
                 self.inf[key] = value
                 self.sup[key] = value
 
@@ -540,7 +487,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
             if len(rshape) == 1:
                 return sum(lhs[k] * rhs[k] for k in range(lshape[0]))
 
-            result = self.empty((rshape[1],), intvl=self._intvl)
+            result = self.empty((rshape[1],))
 
             for j in range(rshape[1]):
                 result[j] = sum(lhs[k] * rhs[k, j] for k in range(lshape[0]))
@@ -551,14 +498,14 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
             raise ValueError
 
         if len(rshape) == 1:
-            result = self.empty((lshape[0],), intvl=self._intvl)
+            result = self.empty((lshape[0],))
 
             for i in range(lshape[0]):
                 result[i] = sum(lhs[i, k] * rhs[k] for k in range(lshape[1]))
 
             return result
 
-        result = self.empty((lshape[0], rshape[1]), intvl=self._intvl)
+        result = self.empty((lshape[0], rshape[1]))
 
         for i in range(lshape[0]):
             for j in range(rshape[1]):
@@ -577,7 +524,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
 
     def __rtruediv__(self, lhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
         match lhs:
-            case self._intvl.endtype() | self._intvl() | float() | int():
+            case self.interval.endtype() | self.interval() | float() | int():
                 for key in itertools.product(*(range(n) for n in self.shape)):
                     self[key] = lhs / self[key]  # type: ignore
 
@@ -590,7 +537,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
             case _:
                 return NotImplemented
 
-        result = self.empty(self.shape, intvl=self._intvl)
+        result = self.empty(self.shape)
 
         for key in itertools.product(*(range(n) for n in self.shape)):
             result[key] = lhs[key] / self[key]  # type: ignore
@@ -612,7 +559,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
             if len(rshape) == 1:
                 return sum(lhs[k] * rhs[k] for k in range(lshape[0]))
 
-            result = self.empty((rshape[1],), intvl=self._intvl)
+            result = self.empty((rshape[1],))
 
             for j in range(rshape[1]):
                 result[j] = sum(lhs[k] * rhs[k, j] for k in range(lshape[0]))
@@ -623,14 +570,14 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
             raise ValueError
 
         if len(rshape) == 1:
-            result = self.empty((lshape[0],), intvl=self._intvl)
+            result = self.empty((lshape[0],))
 
             for i in range(lshape[0]):
                 result[i] = sum(lhs[i, k] * rhs[k] for k in range(lshape[1]))
 
             return result
 
-        result = self.empty((lshape[0], rshape[1]), intvl=self._intvl)
+        result = self.empty((lshape[0], rshape[1]))
 
         for i in range(lshape[0]):
             for j in range(rshape[1]):
@@ -640,7 +587,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
 
     def __iadd__(self, rhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
         match rhs:
-            case self._intvl.endtype() | self._intvl() | float() | int():
+            case self.interval.endtype() | self.interval() | float() | int():
                 for key in itertools.product(*(range(n) for n in self.shape)):
                     self[key] += rhs  # type: ignore
 
@@ -660,7 +607,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
 
     def __isub__(self, rhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
         match rhs:
-            case self._intvl.endtype() | self._intvl() | float() | int():
+            case self.interval.endtype() | self.interval() | float() | int():
                 for key in itertools.product(*(range(n) for n in self.shape)):
                     self[key] -= rhs  # type: ignore
 
@@ -680,7 +627,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
 
     def __imul__(self, rhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
         match rhs:
-            case self._intvl.endtype() | self._intvl() | float() | int():
+            case self.interval.endtype() | self.interval() | float() | int():
                 for key in itertools.product(*(range(n) for n in self.shape)):
                     self[key] *= rhs  # type: ignore
 
@@ -700,7 +647,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
 
     def __itruediv__(self, rhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
         match rhs:
-            case self._intvl.endtype() | self._intvl() | float() | int():
+            case self.interval.endtype() | self.interval() | float() | int():
                 for key in itertools.product(*(range(n) for n in self.shape)):
                     self[key] /= rhs  # type: ignore
 
@@ -719,13 +666,13 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
         return self
 
     def __neg__(self) -> Self:
-        return self.copy().__imul__(-self._intvl.operator.ONE)
+        return self.copy().__imul__(-self.interval.operator.ONE)
 
     def __pos__(self) -> Self:
         return self.copy()
 
     def __abs__(self) -> Self:
-        result = self.empty(self.shape, intvl=self._intvl)
+        result = self.empty(self.shape)
 
         for key in itertools.product(*(range(n) for n in self.shape)):
             result[key] = abs(self[key])  # type: ignore
@@ -735,12 +682,19 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
     def __copy__(self) -> Self:
         return self.copy()
 
+    def __init_subclass__(cls, /, intvl: type[T1], **kwargs):
+        if not issubclass(intvl, Interval):
+            raise TypeError
+
+        super().__init_subclass__(**kwargs)
+        cls.interval = intvl
+
     def __approx_inv(self):
         if not (len(self.shape) == 2 and self.shape[0] == self.shape[1]):
             raise LinAlgError("non-square matrix")
 
-        ZERO = self._intvl.operator.ZERO
-        ONE = self._intvl.operator.ONE
+        ZERO = self.interval.operator.ZERO
+        ONE = self.interval.operator.ONE
         a = self.mid()
         b = np.full_like(a, ZERO)
         n = self.shape[0]
@@ -804,8 +758,8 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
                 raise ValueError
 
     def __approx_qr(self):
-        ZERO = self._intvl.operator.ZERO
-        ONE = self._intvl.operator.ONE
+        ZERO = self.interval.operator.ZERO
+        ONE = self.interval.operator.ONE
         a = self.mid()
         n, m = self.shape
         q = np.full((n, n), ZERO, like=a)
@@ -840,7 +794,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
         if not (b.ndim == 1 and len(b) == len(self)):
             raise LinAlgError("dimension mismatch")
 
-        ZERO = self._intvl.operator.ZERO
+        ZERO = self.interval.operator.ZERO
         a = self.mid()
         b = b.copy()
         n = len(a)
@@ -868,7 +822,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
         if r is None:
             r = approx_inv(self)
 
-        eye = self.eye(len(self), intvl=self._intvl)
+        eye = self.eye(len(self))
         result = self.empty_like()
 
         for i in range(len(self)):
@@ -883,7 +837,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
                     raise LinAlgError
 
                 case "inf":
-                    result = self._intvl()
+                    result = self.interval()
 
                     for i in range(self.shape[0]):
                         tmp = abs(self[i])
@@ -903,7 +857,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
 
         match ord:
             case "fro":
-                result = self._intvl()
+                result = self.interval()
 
                 for i in range(self.shape[0]):
                     for j in range(self.shape[1]):
@@ -912,7 +866,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
                 return vrf.sqrt(result)
 
             case "inf":
-                result = self._intvl()
+                result = self.interval()
 
                 for i in range(self.shape[0]):
                     tmp = sum(abs(self[i, j]) for j in range(self.shape[1]))
@@ -922,7 +876,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
                 return result
 
             case "one":
-                result = self._intvl()
+                result = self.interval()
 
                 for j in range(self.shape[1]):
                     tmp = sum(abs(self[i, j]) for i in range(self.shape[0]))
@@ -942,16 +896,16 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any]:
             r = approx_inv(self)
 
         if not isinstance(b, type(self)):
-            b = self.__class__(b, intvl=self._intvl)
+            b = self.__class__(b)
 
-        tmp = norm(self.eye(len(self), intvl=self._intvl) - r @ self, "inf")
+        tmp = norm(self.eye(len(self)) - r @ self, "inf")
 
-        if tmp.inf >= self._intvl.operator.ONE:
+        if tmp.inf >= self.interval.operator.ONE:
             raise LinAlgError("numerically singular matrix")
 
         mid = r @ b
         rad = norm(r @ (b - self @ mid), "inf") / (1 - tmp)
-        return mid + rad * self._intvl(-1, 1) * b.ones_like()
+        return mid + rad * self.interval(-1, 1) * b.ones_like()
 
 
 def approx_inv(a: IntervalMatrix) -> npt.NDArray:
