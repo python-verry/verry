@@ -103,12 +103,10 @@ class _affinetracker[T: IntervalMatrix](Tracker[T], ABC):
             setcontext(ctx)
 
     def hull(self) -> T:
-        intvl = self._current[0].interval
-        return self._matrix([x.range() for x in self._current], intvl=intvl)
+        return self._matrix([x.range() for x in self._current])
 
     def sample(self) -> T:
-        intvl = self._current[0].interval
-        return self._matrix([x.mid() for x in self._current], intvl=intvl)
+        return self._matrix([x.mid() for x in self._current])
 
     def update(self, a: T, b: T) -> None:
         """Update the current pair.
@@ -162,8 +160,7 @@ class directtracker[T: IntervalMatrix](Tracker[T]):
         return self._current.copy()
 
     def sample(self) -> T:
-        curr = self._current
-        return curr.__class__(curr.mid(), intvl=curr.interval)
+        return self._current.__class__(self._current.mid())
 
     def update(self, a: T, b: T) -> None:
         """Update the current pair.
@@ -198,7 +195,7 @@ class qrtracker[T: IntervalMatrix](Tracker[T]):
     _r: T
 
     def __init__(self, x0: T):
-        self._b = x0.eye(len(x0), intvl=x0.interval)
+        self._b = x0.eye(len(x0))
         self._m = x0.mid()
         self._r = x0 - self._m
 
@@ -206,7 +203,7 @@ class qrtracker[T: IntervalMatrix](Tracker[T]):
         return self._b @ self._r + self._m
 
     def sample(self) -> T:
-        return self._b.__class__(self._m, intvl=self._b.interval)
+        return self._b.__class__(self._m)
 
     def update(self, a: T, b: T) -> None:
         """Update the current pair.
@@ -226,9 +223,9 @@ class qrtracker[T: IntervalMatrix](Tracker[T]):
         s.sort(key=lambda x: x[1], reverse=True)
         inf = a.inf[:, [x[0] for x in s]]
         sup = a.sup[:, [x[0] for x in s]]
-        tmp = a.__class__(inf, sup, intvl=q0.interval) @ q0
+        tmp = a.__class__(inf, sup) @ q0
 
-        q1 = q0.__class__(approx_qr(tmp)[0], intvl=q0.interval)
+        q1 = q0.__class__(approx_qr(tmp)[0])
         p1 = inv(q1, q1.mid().T)
         self._b = q1
         self._m = b.mid()
@@ -288,7 +285,7 @@ class _doubletontracker[T: IntervalMatrix](Tracker[T], ABC):
     _r0: T
 
     def __init__(self, x0: T):
-        self._c = x0.eye(len(x0), intvl=x0.interval)
+        self._c = x0.eye(len(x0))
         self._m = x0.mid()
         self._r0 = x0 - self._m
         self._tracker = self._cls_tracker(x0.zeros_like())
@@ -297,7 +294,7 @@ class _doubletontracker[T: IntervalMatrix](Tracker[T], ABC):
         return self._m + self._tracker.hull() + self._c @ self._r0
 
     def sample(self):
-        return self._c.__class__(self._m, intvl=self._c.interval)
+        return self._c.__class__(self._m)
 
     def update(self, a: T, b: T) -> None:
         """Update the current pair.
@@ -311,7 +308,7 @@ class _doubletontracker[T: IntervalMatrix](Tracker[T], ABC):
         """
         c0 = self._c
         c1 = a.mid() @ c0.inf
-        self._c = c0.__class__(c1, intvl=c0.interval)
+        self._c = c0.__class__(c1)
         self._m = b.mid()
         tmp = b - self._m + (a @ c0 - c1) @ self._r0 + a @ self._tracker.sample()
         self._tracker.update(a, tmp)

@@ -1,8 +1,8 @@
 import itertools
-from abc import ABC
+from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 from types import EllipsisType
-from typing import Any, Literal, Self, Union, overload
+from typing import Any, Literal, Self, cast, overload
 
 import numpy as np
 import numpy.typing as npt
@@ -48,12 +48,44 @@ class matiter(Iterator):
         return self._matrix[next(self._iter)]
 
 
-class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
-    """Inf-sup type interval matrix.
+_intervalmatrices: list[type["IntervalMatrix"]] = []
+
+
+def resolve_intervalmatrix[T: Interval](intvl: type[T]) -> type["IntervalMatrix[T]"]:
+    """Return a type of interval matrix whose components are of type `intvl`.
 
     Parameters
     ----------
-    a : IntervalMatrix | ndarray | Sequence
+    intvl : type[Interval]
+        Component type of interval matrices.
+
+    Returns
+    -------
+    type[IntervalMatrix]
+
+    Raises
+    ------
+    TypeError
+        Raised when the corresponding type of the interval matrix is unknown.
+    """
+    if not _intervalmatrices:
+        from verry.linalg.floatintervalmatrix import FloatIntervalMatrix
+
+        _intervalmatrices.append(FloatIntervalMatrix)
+
+    if tmp := next((x for x in _intervalmatrices if x.interval is intvl), None):
+        return cast(type[IntervalMatrix[T]], tmp)
+
+    raise TypeError("could not resolve the corresponding interval matrix")
+
+
+class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
+    """Abstract base class for inf-sup type interval matrices.
+
+    Parameters
+    ----------
+    inf : ndarray | Sequence
+    sup : ndarray | Sequence, optional
 
     Attributes
     ----------
@@ -69,78 +101,53 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
     inf: npt.NDArray
     sup: npt.NDArray
 
-    @overload
-    def __init__(
-        self,
-        inf: Union[
-            "IntervalMatrix[T1]",
-            npt.NDArray,
-            Sequence[T1 | T2 | float | int | str],
-            Sequence[npt.NDArray | Sequence[T1 | T2 | float | int | str]],
-        ],
-    ): ...
-
-    @overload
     def __init__(
         self,
         inf: npt.NDArray
-        | Sequence[T2 | float | int | str]
-        | Sequence[npt.NDArray | Sequence[T2 | float | int | str]],
+        | Sequence[T1 | T2 | float | int | str]
+        | Sequence[npt.NDArray | Sequence[T1 | T2 | float | int | str]],
         sup: npt.NDArray
-        | Sequence[T2 | float | int | str]
-        | Sequence[npt.NDArray | Sequence[T2 | float | int | str]],
-    ): ...
-
-    def __init__(self, inf, sup=None, **kwargs):
+        | Sequence[T1 | T2 | float | int | str]
+        | Sequence[npt.NDArray | Sequence[T1 | T2 | float | int | str]]
+        | None = None,
+        **kwargs,
+    ):
         if kwargs.get("_skipcheck"):
-            self.inf = inf
-            self.sup = sup
+            self.inf = inf  # type: ignore
+            self.sup = sup  # type: ignore
             return
 
         if sup is not None:
-            if not isinstance(inf, np.ndarray):
-                inf = np.array(inf, np.object_)
-
-            if not isinstance(sup, np.ndarray):
-                sup = np.array(sup, np.object_)
+            inf = np.array(inf, np.object_)
+            sup = np.array(sup, np.object_)
 
             if not (inf.shape == sup.shape and 1 <= inf.ndim <= 2):
                 raise ValueError
 
             self.inf = self._emptyarray(inf.shape)  # type: ignore
-            self.sup = self._emptyarray(sup.shape)  # type: ignore
+            self.sup = self._emptyarray(inf.shape)  # type: ignore
 
             for key in itertools.product(*(range(n) for n in inf.shape)):
-                self.inf[key] = self.interval(inf[key]).inf  # type: ignore
-                self.sup[key] = self.interval(sup[key]).sup  # type: ignore
+                self.inf[key] = self.interval.ensure(inf[key]).inf  # type: ignore
+                self.sup[key] = self.interval.ensure(sup[key]).sup  # type: ignore
 
                 if self.inf[key] > self.sup[key]:
                     raise ValueError
 
             return
 
-        if isinstance(inf, IntervalMatrix):
-            self.inf = self._emptyarray(inf.shape)  # type: ignore
-            self.sup = self._emptyarray(inf.shape)  # type: ignore
+        inf = np.array(inf, np.object_)
 
-            for key in itertools.product(*(range(n) for n in inf.shape)):
-                self.inf[key] = inf[key].inf  # type: ignore
-                self.sup[key] = inf[key].sup  # type: ignore
-
-            return
-
-        tmp = np.array(inf, np.object_)
-
-        if not 1 <= tmp.ndim <= 2:
+        if not 1 <= inf.ndim <= 2:
             raise ValueError
 
-        self.inf = self._emptyarray(tmp.shape)  # type: ignore
-        self.sup = self._emptyarray(tmp.shape)  # type: ignore
+        self.inf = self._emptyarray(inf.shape)  # type: ignore
+        self.sup = self._emptyarray(inf.shape)  # type: ignore
 
-        for key in itertools.product(*(range(n) for n in tmp.shape)):
-            x = self.interval.ensure(tmp[key])
-            self.inf[key] = x.inf
-            self.sup[key] = x.sup
+        for key in itertools.product(*(range(n) for n in inf.shape)):
+            tmp = self.interval.ensure(inf[key])
+            self.inf[key] = tmp.inf
+            self.sup[key] = tmp.sup
 
     @property
     def flat(self) -> flatiter[T1]:
@@ -223,8 +230,9 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
         return result
 
     @classmethod
+    @abstractmethod
     def _emptyarray(cls, shape: int | tuple[int] | tuple[int, int]) -> npt.NDArray:
-        return np.empty(shape, np.object_)
+        raise NotImplementedError
 
     def copy(self) -> Self:
         """Return a copy of the interval matrix."""
@@ -338,7 +346,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
             return self.__approx_inv()
 
         if fun is approx_norm:
-            return self.__approx_norm()
+            return self.__approx_norm(args[1])
 
         if fun is approx_qr:
             return self.__approx_qr()
@@ -350,10 +358,10 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
             return self.__approx_solve(args[1])
 
         if fun is inv:
-            return self.__inv()
+            return self.__inv(args[1])
 
         if fun is norm:
-            return self.__norm()
+            return self.__norm(args[1])
 
         if fun is solve:
             if args[0] is not self:
@@ -681,13 +689,6 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
 
     def __copy__(self) -> Self:
         return self.copy()
-
-    def __init_subclass__(cls, /, intvl: type[T1], **kwargs):
-        if not issubclass(intvl, Interval):
-            raise TypeError
-
-        super().__init_subclass__(**kwargs)
-        cls.interval = intvl
 
     def __approx_inv(self):
         if not (len(self.shape) == 2 and self.shape[0] == self.shape[1]):

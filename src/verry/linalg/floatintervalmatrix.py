@@ -9,8 +9,11 @@ from verry.linalg.intervalmatrix import (
 )
 
 
-class FloatIntervalMatrix(IntervalMatrix[FloatInterval, float], intvl=FloatInterval):
+class FloatIntervalMatrix(IntervalMatrix[FloatInterval, float]):
+    """Double-precision inf-sup type interval matrix."""
+
     __slots__ = ()
+    interval = FloatInterval
 
     @classmethod
     def _emptyarray(cls, shape):

@@ -37,6 +37,7 @@ Miscellaneous
     :toctree: generated/
 
     LinAlgError
+    resolve_intervalmatrix
 
 """
 
@@ -50,6 +51,7 @@ from .intervalmatrix import (
     approx_solve,
     inv,
     norm,
+    resolve_intervalmatrix,
     solve,
 )
 
@@ -63,5 +65,6 @@ __all__ = [
     "approx_solve",
     "inv",
     "norm",
+    "resolve_intervalmatrix",
     "solve",
 ]
