@@ -27,8 +27,8 @@ class FloatIntervalMatrix(IntervalMatrix[FloatInterval, float]):
             return tuple(np.linalg.qr(self.mid()))
 
         if fun is approx_solve:
-            a = args[0].mid() if isinstance(args[0], IntervalMatrix) else args[0]
-            b = args[1].mid() if isinstance(args[1], IntervalMatrix) else args[1]
+            a = args[0].mid() if isinstance(args[0], type(self)) else args[0]
+            b = args[1].mid() if isinstance(args[1], type(self)) else args[1]
             return np.linalg.solve(a, b)
 
         return super()._verry_overload_(fun, *args, **kwargs)

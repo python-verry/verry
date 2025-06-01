@@ -117,37 +117,37 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
             self.sup = sup  # type: ignore
             return
 
-        if sup is not None:
+        if sup is None:
             inf = np.array(inf, np.object_)
-            sup = np.array(sup, np.object_)
 
-            if not (inf.shape == sup.shape and 1 <= inf.ndim <= 2):
+            if not 1 <= inf.ndim <= 2:
                 raise ValueError
 
             self.inf = self._emptyarray(inf.shape)  # type: ignore
             self.sup = self._emptyarray(inf.shape)  # type: ignore
 
             for key in itertools.product(*(range(n) for n in inf.shape)):
-                self.inf[key] = self.interval.ensure(inf[key]).inf  # type: ignore
-                self.sup[key] = self.interval.ensure(sup[key]).sup  # type: ignore
-
-                if self.inf[key] > self.sup[key]:
-                    raise ValueError
+                tmp = self.interval.ensure(inf[key])
+                self.inf[key] = tmp.inf
+                self.sup[key] = tmp.sup
 
             return
 
         inf = np.array(inf, np.object_)
+        sup = np.array(sup, np.object_)
 
-        if not 1 <= inf.ndim <= 2:
+        if not (1 <= inf.ndim <= 2 and inf.shape == sup.shape):
             raise ValueError
 
         self.inf = self._emptyarray(inf.shape)  # type: ignore
         self.sup = self._emptyarray(inf.shape)  # type: ignore
 
         for key in itertools.product(*(range(n) for n in inf.shape)):
-            tmp = self.interval.ensure(inf[key])
-            self.inf[key] = tmp.inf
-            self.sup[key] = tmp.sup
+            self.inf[key] = self.interval.ensure(inf[key]).inf  # type: ignore
+            self.sup[key] = self.interval.ensure(sup[key]).sup  # type: ignore
+
+            if self.inf[key] > self.sup[key]:
+                raise ValueError
 
     @property
     def flat(self) -> flatiter[T1]:
@@ -236,8 +236,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
 
     def copy(self) -> Self:
         """Return a copy of the interval matrix."""
-        cls, inf, sup = type(self), self.inf.copy(), self.sup.copy()
-        return cls(inf, sup, _skipcheck=True)  # type: ignore
+        return self.__class__(self.inf.copy(), self.sup.copy(), _skipcheck=True)  # type: ignore
 
     def empty_like(self) -> Self:
         """Return a new interval matrix with the same shape as `self`."""
@@ -254,8 +253,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
 
     def flatten(self) -> Self:
         """Return a copy of the interval matrix collapsed into one dimension."""
-        cls, inf, sup = type(self), self.inf.flatten(), self.sup.flatten()
-        return cls(inf, sup, _skipcheck=True)  # type: ignore
+        return self.__class__(self.inf.flatten(), self.sup.flatten(), _skipcheck=True)  # type: ignore
 
     def interiorcontains(self, other: Self | npt.NDArray) -> bool:
         """Return ``True`` if the interior of the interval matrix contains `other`."""
@@ -457,13 +455,13 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
     def __contains__(
         self, item: Sequence[T2 | float | int | Sequence[T2 | float | int]]
     ) -> bool:
-        item_ = np.array(item, dtype=np.object_)
+        tmp = np.array(item, dtype=np.object_)
 
-        if item_.shape != self.shape:
+        if tmp.shape != self.shape:
             return False
 
         for key in itertools.product(*(range(n) for n in self.shape)):
-            if item_[key] not in self[key]:  # type: ignore
+            if tmp[key] not in self[key]:  # type: ignore
                 return False
 
         return True
