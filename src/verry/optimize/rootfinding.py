@@ -288,22 +288,21 @@ def krawczyk[T: IntervalMatrix](
         raise ValueError
 
     intvlmat = type(x)
-    intvl = x.interval
 
     match fprime:
         case Callable():  # type: ignore
-            c = intvlmat(fprime(*x), intvl=intvl)
+            c = intvlmat(fprime(*x))
 
         case x.__class__():
             c = fprime
 
         case None:
-            c = intvlmat(jacobian(fun)(*x), intvl=intvl)
+            c = intvlmat(jacobian(fun)(*x))
 
         case _:
             raise TypeError
 
-    x0 = intvlmat(x.mid(), intvl=intvl)
+    x0 = intvlmat(x.mid())
 
     if not x.interiorcontains(x0):
         return ("UNKNOWN", None)
@@ -313,8 +312,8 @@ def krawczyk[T: IntervalMatrix](
     except LinAlgError:
         return ("UNKNOWN", None)
 
-    tmp = intvlmat.eye(len(x), intvl=intvl) - r @ c
-    x1 = x0 - r @ intvlmat(fun(*x0), intvl=intvl) + tmp @ (x - x0)
+    tmp = intvlmat.eye(len(x)) - r @ c
+    x1 = x0 - r @ intvlmat(fun(*x0)) + tmp @ (x - x0)
 
     if x.interiorcontains(x1):
         return ("UNIQUE", x1)

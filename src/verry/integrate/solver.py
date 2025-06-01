@@ -9,7 +9,7 @@ from verry.integrate.tracker import Tracker, doubletontracker
 from verry.integrate.utility import seriessolution, variationaleq
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries
-from verry.linalg.intervalmatrix import IntervalMatrix
+from verry.linalg.intervalmatrix import IntervalMatrix, resolve_intervalmatrix
 
 
 class AbortSolving(Exception):
@@ -245,11 +245,10 @@ class C0Solver:
             raise TypeError
 
         if not isinstance(y0, IntervalMatrix):
-            y0 = IntervalMatrix(y0, intvl=type(t0))
+            y0 = resolve_intervalmatrix(type(t0))(y0)
 
-        intvl = type(t0)
         intvlmat = type(y0)
-        eye = intvlmat.eye(len(y0), intvl=intvl)
+        eye = intvlmat.eye(len(y0))
 
         ts = [t0.inf]
         series = []
@@ -266,13 +265,13 @@ class C0Solver:
 
             varfun = variationaleq(fun, lambda t: tuple(x(t - u0) for x in itor.series))  # type: ignore
             tmp = seriessolution(fun, u0, tracker.sample(), itor.order - 1)
-            a1 = intvlmat([x.eval(u1 - u0) for x in tmp], intvl=intvl)
+            a1 = intvlmat([x.eval(u1 - u0) for x in tmp])
             jac = eye.empty_like()
 
             for i in range(len(y0)):
                 tmp = seriessolution(varfun, u0, eye[i], itor.order - 1)
                 a1[i] += itor.series[i].coeffs[-1] * (u1 - u0) ** itor.order  # type: ignore
-                jac[:, i] = intvlmat([x.eval(u1 - u0) for x in tmp], intvl=intvl)
+                jac[:, i] = intvlmat([x.eval(u1 - u0) for x in tmp])
 
             tracker.update(jac, a1)
             itor.update(u1, y1 := tracker.hull())
@@ -480,15 +479,14 @@ class C1Solver:
             raise TypeError
 
         if not isinstance(y0, IntervalMatrix):
-            y0 = IntervalMatrix(y0, intvl=type(t0))
+            y0 = resolve_intervalmatrix(type(t0))(y0)
 
         intvl = type(t0)
         intvlmat = type(y0)
-        eye = intvlmat.eye(len(y0), intvl=intvl)
-
+        eye = intvlmat.eye(len(y0))
         ts = [t0.inf]
         series = []
-        totjac = intvlmat.eye(len(y0), intvl=intvl)
+        totjac = intvlmat.eye(len(y0))
 
         tracker = self._tracker(y0)
         miditor = self._integrator(fun, t0, tracker.sample(), t_bound)
@@ -517,12 +515,12 @@ class C1Solver:
             if any(x.status == "RUNNING" for x in varitors):
                 u1 = intvl(min(x.t.sup for x in varitors))
 
-            a1 = intvlmat([x.eval(u1 - u0) for x in miditor.series], intvl=intvl)
+            a1 = intvlmat([x.eval(u1 - u0) for x in miditor.series])
             jac = totjac.empty_like()
 
             for i in range(len(y0)):
                 tmp = [x.eval(u1 - u0) for x in varitors[i].series]
-                jac[:, i] = intvlmat(tmp, intvl=intvl)
+                jac[:, i] = intvlmat(tmp)
 
             tracker.update(jac, a1)
             miditor.update(u1, tracker.sample())

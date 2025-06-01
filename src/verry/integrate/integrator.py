@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from typing import Any, ClassVar, Literal
+from typing import Any, Literal
 
 from verry import function as vrf
 from verry.integrate.utility import seriessolution
@@ -178,80 +178,62 @@ def eilo[T: Interval = Any](
     if max_tries < 1:
         raise ValueError
 
-    class Integrator(
-        _eilo,
-        order=order,
-        rtol=rtol,
-        atol=atol,
-        max_tries=max_tries,
-        min_step=min_step,
-        max_step=max_step,
-    ):
-        pass
+    class Result(_eilo[T]):
+        def __init__(
+            self, fun: Callable, t0: T, y0: IntervalMatrix[T] | Sequence[T], t_bound: T
+        ):
+            if not isinstance(t0, Interval):
+                raise TypeError
 
-    return Integrator
+            if t0.sup >= t_bound.inf:
+                raise ValueError
+
+            self.status = "RUNNING"
+            self.t = t0
+            self.y = tuple(y0)
+            self.t_bound = t_bound
+            self.t_prev = None
+            self.series = None
+            self.order = order
+            self._fun = fun
+            self._rtol = rtol
+            self._atol = atol
+            self._max_tries = max_tries
+            self._min_step = min_step
+            self._max_step = max_step
+
+            if isinstance(rtol, float):
+                self._rtol = t0.converter.fromfloat(rtol, strict=False)
+
+            if isinstance(atol, float):
+                self._atol = t0.converter.fromfloat(atol, strict=False)
+
+            if isinstance(min_step, float):
+                self._min_step = t0.converter.fromfloat(min_step)
+
+            if isinstance(max_step, float):
+                self._max_step = t0.converter.fromfloat(max_step)
+
+            if not t0.operator.ZERO <= min_step <= max_step:
+                raise ValueError
+
+    return Result
 
 
 class _eilo[T: Interval](Integrator[T], ABC):
-    order: ClassVar[int]
-    _max_tries: ClassVar[int]
-    _cls_rtol: ClassVar[Any]
-    _cls_atol: ClassVar[Any]
-    _cls_min_step: ClassVar[Any]
-    _cls_max_step: ClassVar[Any]
-
     status: Literal["FAILURE", "RUNNING", "SUCCESS"]
     t: T
     y: tuple[T, ...]
     t_bound: T
     t_prev: T | None
     series: tuple[IntervalSeries[T], ...] | None
+    order: int
     _fun: Callable
     _rtol: Any
     _atol: Any
     _min_step: Any
     _max_step: Any
-
-    def __init__(
-        self, fun: Callable, t0: T, y0: IntervalMatrix[T] | Sequence[T], t_bound: T
-    ):
-        rtol = self._cls_rtol
-        atol = self._cls_atol
-        min_step = self._cls_min_step
-        max_step = self._cls_max_step
-
-        if not isinstance(t0, Interval):
-            raise TypeError
-
-        if t0.sup >= t_bound.inf:
-            raise ValueError
-
-        if isinstance(rtol, float):
-            rtol = t0.converter.fromfloat(rtol, strict=False)
-
-        if isinstance(atol, float):
-            atol = t0.converter.fromfloat(atol, strict=False)
-
-        if isinstance(min_step, float):
-            min_step = t0.converter.fromfloat(min_step)
-
-        if isinstance(max_step, float):
-            max_step = t0.converter.fromfloat(max_step)
-
-        if not t0.operator.ZERO <= min_step <= max_step:
-            raise ValueError
-
-        self.status = "RUNNING"
-        self.t = t0
-        self.y = tuple(y0)
-        self.t_bound = t_bound
-        self.t_prev = None
-        self.series = None
-        self._fun = fun
-        self._rtol = rtol
-        self._atol = atol
-        self._min_step = min_step
-        self._max_step = max_step
+    _max_tries: int
 
     def step(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         ZERO = self.t.operator.ZERO
@@ -342,32 +324,6 @@ class _eilo[T: Interval](Integrator[T], ABC):
         self.t = t.copy()
         self.y = tuple(x.copy() for x in y)
 
-    def __init_subclass__(
-        cls,
-        /,
-        order: int,
-        rtol: Any,
-        atol: Any,
-        max_tries: int,
-        min_step: Any,
-        max_step: Any,
-        **kwargs,
-    ):
-        super().__init_subclass__(**kwargs)
-
-        if order < 3:
-            raise ValueError
-
-        if max_tries < 1:
-            raise ValueError
-
-        cls.order = order
-        cls._max_tries = max_tries
-        cls._cls_rtol = rtol
-        cls._cls_atol = atol
-        cls._cls_min_step = min_step
-        cls._cls_max_step = max_step
-
 
 def kashi[T: Interval = Any](
     order: int = 15,
@@ -415,80 +371,62 @@ def kashi[T: Interval = Any](
     if max_tries < 1:
         raise ValueError
 
-    class Integrator(
-        _kashi,
-        order=order,
-        rtol=rtol,
-        atol=atol,
-        max_tries=max_tries,
-        min_step=min_step,
-        max_step=max_step,
-    ):
-        pass
+    class Result(_kashi[T]):
+        def __init__(
+            self, fun: Callable, t0: T, y0: IntervalMatrix[T] | Sequence[T], t_bound: T
+        ):
+            if not isinstance(t0, Interval):
+                raise TypeError
 
-    return Integrator
+            if t0.sup >= t_bound.inf:
+                raise ValueError
+
+            self.status = "RUNNING"
+            self.t = t0
+            self.y = tuple(y0)
+            self.t_bound = t_bound
+            self.t_prev = None
+            self.series = None
+            self.order = order
+            self._fun = fun
+            self._rtol = rtol
+            self._atol = atol
+            self._max_tries = max_tries
+            self._min_step = min_step
+            self._max_step = max_step
+
+            if isinstance(rtol, float):
+                self._rtol = t0.converter.fromfloat(rtol, strict=False)
+
+            if isinstance(atol, float):
+                self._atol = t0.converter.fromfloat(atol, strict=False)
+
+            if isinstance(min_step, float):
+                self._min_step = t0.converter.fromfloat(min_step)
+
+            if isinstance(max_step, float):
+                self._max_step = t0.converter.fromfloat(max_step)
+
+            if not t0.operator.ZERO <= min_step <= max_step:
+                raise ValueError
+
+    return Result
 
 
 class _kashi[T: Interval](Integrator[T], ABC):
-    order: ClassVar[int]
-    _max_tries: ClassVar[int]
-    _cls_rtol: ClassVar[Any]
-    _cls_atol: ClassVar[Any]
-    _cls_min_step: ClassVar[Any]
-    _cls_max_step: ClassVar[Any]
-
     status: Literal["FAILURE", "RUNNING", "SUCCESS"]
     t: T
     y: tuple[T, ...]
     t_bound: T
     t_prev: T | None
     series: tuple[IntervalSeries[T], ...] | None
+    order: int
     _fun: Callable
     _rtol: Any
     _atol: Any
     _min_step: Any
     _max_step: Any
-
-    def __init__(
-        self, fun: Callable, t0: T, y0: IntervalMatrix[T] | Sequence[T], t_bound: T
-    ):
-        rtol = self._cls_rtol
-        atol = self._cls_atol
-        min_step = self._cls_min_step
-        max_step = self._cls_max_step
-
-        if not isinstance(t0, Interval):
-            raise TypeError
-
-        if t0.sup >= t_bound.inf:
-            raise ValueError
-
-        if isinstance(rtol, float):
-            rtol = t0.converter.fromfloat(rtol, strict=False)
-
-        if isinstance(atol, float):
-            atol = t0.converter.fromfloat(atol, strict=False)
-
-        if isinstance(min_step, float):
-            min_step = t0.converter.fromfloat(min_step)
-
-        if isinstance(max_step, float):
-            max_step = t0.converter.fromfloat(max_step)
-
-        if not t0.operator.ZERO <= min_step <= max_step:
-            raise ValueError
-
-        self.status = "RUNNING"
-        self.t = t0
-        self.y = tuple(y0)
-        self.t_bound = t_bound
-        self.t_prev = None
-        self.series = None
-        self._fun = fun
-        self._rtol = rtol
-        self._atol = atol
-        self._min_step = min_step
-        self._max_step = max_step
+    _max_tries: int
 
     def step(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         ZERO = self.t.operator.ZERO
@@ -601,22 +539,3 @@ class _kashi[T: Interval](Integrator[T], ABC):
 
         self.t = t.copy()
         self.y = tuple(x.copy() for x in y)
-
-    def __init_subclass__(
-        cls,
-        /,
-        order: int,
-        rtol: Any,
-        atol: Any,
-        max_tries: int,
-        min_step: Any,
-        max_step: Any,
-        **kwargs,
-    ):
-        super().__init_subclass__(**kwargs)
-        cls.order = order
-        cls._max_tries = max_tries
-        cls._cls_rtol = rtol
-        cls._cls_atol = atol
-        cls._cls_min_step = min_step
-        cls._cls_max_step = max_step
