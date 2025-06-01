@@ -1,0 +1,6 @@
+﻿verry.integrate.eilo
+====================
+
+.. currentmodule:: verry.integrate
+
+.. autofunction:: eilo

@@ -1,0 +1,11 @@
+﻿verry.integrate.directtracker
+=============================
+
+.. currentmodule:: verry.integrate
+
+.. autoclass:: directtracker
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

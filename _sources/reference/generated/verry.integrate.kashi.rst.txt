@@ -1,0 +1,6 @@
+﻿verry.integrate.kashi
+=====================
+
+.. currentmodule:: verry.integrate
+
+.. autofunction:: kashi

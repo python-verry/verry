@@ -1,0 +1,6 @@
+﻿verry.optimize.allroot
+======================
+
+.. currentmodule:: verry.optimize
+
+.. autofunction:: allroot

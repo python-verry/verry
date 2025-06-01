@@ -1,0 +1,11 @@
+﻿verry.integrate.qrtracker
+=========================
+
+.. currentmodule:: verry.integrate
+
+.. autoclass:: qrtracker
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

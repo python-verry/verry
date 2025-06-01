@@ -1,0 +1,6 @@
+﻿verry.function.sin
+==================
+
+.. currentmodule:: verry.function
+
+.. autofunction:: sin

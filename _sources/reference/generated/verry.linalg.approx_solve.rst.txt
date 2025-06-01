@@ -1,0 +1,6 @@
+﻿verry.linalg.approx\_solve
+==========================
+
+.. currentmodule:: verry.linalg
+
+.. autofunction:: approx_solve

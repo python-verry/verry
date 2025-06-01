@@ -1,0 +1,6 @@
+﻿verry.integrate.affinetracker
+=============================
+
+.. currentmodule:: verry.integrate
+
+.. autofunction:: affinetracker

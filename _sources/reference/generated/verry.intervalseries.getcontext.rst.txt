@@ -1,0 +1,6 @@
+﻿verry.intervalseries.getcontext
+===============================
+
+.. currentmodule:: verry.intervalseries
+
+.. autofunction:: getcontext

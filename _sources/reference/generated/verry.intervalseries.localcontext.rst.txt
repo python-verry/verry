@@ -1,0 +1,6 @@
+﻿verry.intervalseries.localcontext
+=================================
+
+.. currentmodule:: verry.intervalseries
+
+.. autofunction:: localcontext

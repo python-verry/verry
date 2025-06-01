@@ -1,0 +1,6 @@
+﻿verry.affine.summarized
+=======================
+
+.. currentmodule:: verry.affine
+
+.. autofunction:: summarized
