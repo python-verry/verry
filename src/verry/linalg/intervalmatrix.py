@@ -16,7 +16,7 @@ class LinAlgError(ValueError):
     """Error raised by :mod:`verry.linalg` functions."""
 
 
-class flatiter[T: Interval](Iterator[T]):
+class flatiter[T: ComparableScalar](Iterator[Interval[T]]):
     __slots__ = ("_iter", "_matrix")
     _iter: Iterator
     _matrix: "IntervalMatrix[T]"
@@ -28,7 +28,7 @@ class flatiter[T: Interval](Iterator[T]):
     def __iter__(self) -> Self:
         return self
 
-    def __next__(self) -> T:
+    def __next__(self) -> Interval[T]:
         return self._matrix[*next(self._iter)]
 
 
@@ -51,7 +51,9 @@ class matiter(Iterator):
 _intervalmatrices: list[type["IntervalMatrix"]] = []
 
 
-def resolve_intervalmatrix[T: Interval](intvl: type[T]) -> type["IntervalMatrix[T]"]:
+def resolve_intervalmatrix[T: ComparableScalar](
+    intvl: type[Interval[T]],
+) -> type["IntervalMatrix[T]"]:
     """Return a type of interval matrix whose components are of type `intvl`.
 
     Parameters
@@ -79,7 +81,7 @@ def resolve_intervalmatrix[T: Interval](intvl: type[T]) -> type["IntervalMatrix[
     raise TypeError("could not resolve the corresponding interval matrix")
 
 
-class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
+class IntervalMatrix[S: ComparableScalar](ABC):
     """Abstract base class for inf-sup type interval matrices.
 
     Parameters
@@ -97,18 +99,18 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
 
     __slots__ = ("inf", "sup")
     __array_ufunc__ = None
-    interval: T1
+    interval: type[Interval[S]]
     inf: npt.NDArray
     sup: npt.NDArray
 
     def __init__(
         self,
         inf: npt.NDArray
-        | Sequence[T1 | T2 | float | int | str]
-        | Sequence[npt.NDArray | Sequence[T1 | T2 | float | int | str]],
+        | Sequence[Interval[S] | S | float | int | str]
+        | Sequence[npt.NDArray | Sequence[Interval[S] | S | float | int | str]],
         sup: npt.NDArray
-        | Sequence[T1 | T2 | float | int | str]
-        | Sequence[npt.NDArray | Sequence[T1 | T2 | float | int | str]]
+        | Sequence[Interval[S] | S | float | int | str]
+        | Sequence[npt.NDArray | Sequence[Interval[S] | S | float | int | str]]
         | None = None,
         **kwargs,
     ):
@@ -150,7 +152,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
                 raise ValueError
 
     @property
-    def flat(self) -> flatiter[T1]:
+    def flat(self) -> flatiter[S]:
         return flatiter(self)
 
     @property
@@ -382,7 +384,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
     def __getitem__(self, key: int) -> Any: ...
 
     @overload
-    def __getitem__(self, key: tuple[int, int]) -> T1: ...
+    def __getitem__(self, key: tuple[int, int]) -> Interval[S]: ...
 
     @overload
     def __getitem__(
@@ -402,7 +404,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
 
     @overload
     def __setitem__(
-        self, key: tuple[int, int], value: T1 | T2 | float | int
+        self, key: tuple[int, int], value: Interval[S] | S | float | int
     ) -> None: ...
 
     @overload
@@ -414,7 +416,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
         | tuple[int, slice]
         | tuple[slice, int]
         | tuple[slice, slice],
-        value: Self | T1 | T2 | npt.NDArray | float | int,
+        value: Self | Interval[S] | S | npt.NDArray | float | int,
     ) -> None: ...
 
     def __setitem__(self, key, value):
@@ -453,7 +455,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
         return matiter(self)
 
     def __contains__(
-        self, item: Sequence[T2 | float | int | Sequence[T2 | float | int]]
+        self, item: Sequence[S | float | int | Sequence[S | float | int]]
     ) -> bool:
         tmp = np.array(item, dtype=np.object_)
 
@@ -466,19 +468,21 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
 
         return True
 
-    def __add__(self, rhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
+    def __add__(self, rhs: Self | Interval[S] | S | npt.NDArray | float | int) -> Self:
         return self.copy().__iadd__(rhs)
 
-    def __sub__(self, rhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
+    def __sub__(self, rhs: Self | Interval[S] | S | npt.NDArray | float | int) -> Self:
         return self.copy().__isub__(rhs)
 
-    def __mul__(self, rhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
+    def __mul__(self, rhs: Self | Interval[S] | S | npt.NDArray | float | int) -> Self:
         return self.copy().__imul__(rhs)
 
-    def __truediv__(self, rhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
+    def __truediv__(
+        self, rhs: Self | Interval[S] | S | npt.NDArray | float | int
+    ) -> Self:
         return self.copy().__itruediv__(rhs)
 
-    def __matmul__(self, rhs: Self | npt.NDArray) -> Self | T1:
+    def __matmul__(self, rhs: Self | npt.NDArray) -> Self:
         lhs, lshape = self, self.shape
 
         if not isinstance(rhs, (np.ndarray, type(self))):
@@ -519,16 +523,18 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
 
         return result
 
-    def __radd__(self, lhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
+    def __radd__(self, lhs: Self | Interval[S] | S | npt.NDArray | float | int) -> Self:
         return self.copy().__iadd__(lhs)
 
-    def __rsub__(self, lhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
+    def __rsub__(self, lhs: Self | Interval[S] | S | npt.NDArray | float | int) -> Self:
         return self.__neg__().__iadd__(lhs)
 
-    def __rmul__(self, lhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
+    def __rmul__(self, lhs: Self | Interval[S] | S | npt.NDArray | float | int) -> Self:
         return self.copy().__imul__(lhs)
 
-    def __rtruediv__(self, lhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
+    def __rtruediv__(
+        self, lhs: Self | Interval[S] | S | npt.NDArray | float | int
+    ) -> Self:
         match lhs:
             case self.interval.endtype() | self.interval() | float() | int():
                 for key in itertools.product(*(range(n) for n in self.shape)):
@@ -550,7 +556,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
 
         return result
 
-    def __rmatmul__(self, lhs: Self | npt.NDArray) -> Self | T1:
+    def __rmatmul__(self, lhs: Self | npt.NDArray) -> Self:
         rhs, rshape = self, self.shape
 
         if not isinstance(lhs, (np.ndarray, type(self))):
@@ -591,7 +597,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
 
         return result
 
-    def __iadd__(self, rhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
+    def __iadd__(self, rhs: Self | Interval[S] | S | npt.NDArray | float | int) -> Self:
         match rhs:
             case self.interval.endtype() | self.interval() | float() | int():
                 for key in itertools.product(*(range(n) for n in self.shape)):
@@ -611,7 +617,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
 
         return self
 
-    def __isub__(self, rhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
+    def __isub__(self, rhs: Self | Interval[S] | S | npt.NDArray | float | int) -> Self:
         match rhs:
             case self.interval.endtype() | self.interval() | float() | int():
                 for key in itertools.product(*(range(n) for n in self.shape)):
@@ -631,7 +637,7 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
 
         return self
 
-    def __imul__(self, rhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
+    def __imul__(self, rhs: Self | Interval[S] | S | npt.NDArray | float | int) -> Self:
         match rhs:
             case self.interval.endtype() | self.interval() | float() | int():
                 for key in itertools.product(*(range(n) for n in self.shape)):
@@ -651,7 +657,9 @@ class IntervalMatrix[T1: Interval, T2: ComparableScalar = Any](ABC):
 
         return self
 
-    def __itruediv__(self, rhs: Self | T1 | T2 | npt.NDArray | float | int) -> Self:
+    def __itruediv__(
+        self, rhs: Self | Interval[S] | S | npt.NDArray | float | int
+    ) -> Self:
         match rhs:
             case self.interval.endtype() | self.interval() | float() | int():
                 for key in itertools.product(*(range(n) for n in self.shape)):
@@ -930,7 +938,9 @@ def approx_inv(a: IntervalMatrix) -> npt.NDArray:
     raise RuntimeError
 
 
-def approx_norm(a: IntervalMatrix, ord: Literal["fro", "inf", "one", "two"]) -> Any:
+def approx_norm[T: ComparableScalar](
+    a: IntervalMatrix[T], ord: Literal["fro", "inf", "one", "two"]
+) -> T:
     """Compute a matrix or vector norm approximately.
 
     Parameters
@@ -966,11 +976,11 @@ def approx_qr(a: IntervalMatrix) -> tuple[npt.NDArray, npt.NDArray]:
 
 
 @overload
-def approx_solve(a: npt.NDArray, b: IntervalMatrix) -> npt.NDArray: ...
+def approx_solve(a: IntervalMatrix, b: IntervalMatrix | npt.NDArray) -> npt.NDArray: ...
 
 
 @overload
-def approx_solve(a: IntervalMatrix, b: npt.NDArray) -> npt.NDArray: ...
+def approx_solve(a: npt.NDArray, b: IntervalMatrix) -> npt.NDArray: ...
 
 
 def approx_solve(a, b):
@@ -1005,7 +1015,7 @@ def approx_solve(a, b):
     raise RuntimeError
 
 
-def inv[T: IntervalMatrix](a: T, r: npt.NDArray | None = None) -> T:
+def inv[T: ComparableScalar](a: IntervalMatrix[T], r: npt.NDArray | None = None) -> T:
     """Compute the inverse of an interval matrix.
 
     Parameters
@@ -1030,9 +1040,9 @@ def inv[T: IntervalMatrix](a: T, r: npt.NDArray | None = None) -> T:
     raise RuntimeError
 
 
-def norm[T: Interval](
+def norm[T: ComparableScalar](
     a: IntervalMatrix[T], ord: Literal["fro", "inf", "one", "two"]
-) -> T:
+) -> Interval[T]:
     """Compute a matrix or vector norm.
 
     Parameters
@@ -1051,15 +1061,21 @@ def norm[T: Interval](
 
 
 @overload
-def solve[T: IntervalMatrix](
-    a: T, b: npt.NDArray, r: npt.NDArray | None = ...
-) -> T: ...
+def solve[T: ComparableScalar](
+    a: IntervalMatrix[T], b: IntervalMatrix[T], r: npt.NDArray | None = ...
+) -> IntervalMatrix[T]: ...
 
 
 @overload
-def solve[T: IntervalMatrix](
-    a: npt.NDArray, b: T, r: npt.NDArray | None = ...
-) -> T: ...
+def solve[T: ComparableScalar](
+    a: IntervalMatrix[T], b: npt.NDArray, r: npt.NDArray | None = ...
+) -> IntervalMatrix[T]: ...
+
+
+@overload
+def solve[T: ComparableScalar](
+    a: npt.NDArray, b: IntervalMatrix[T], r: npt.NDArray | None = ...
+) -> IntervalMatrix[T]: ...
 
 
 def solve(a, b, r=None):

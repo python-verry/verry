@@ -7,9 +7,10 @@ from verry.integrate.utility import seriessolution
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries, localcontext
 from verry.linalg.intervalmatrix import IntervalMatrix
+from verry.typing import ComparableScalar
 
 
-class Integrator[T: Interval](ABC):
+class Integrator[T: ComparableScalar](ABC):
     r"""Abstract base class for ODE integrators.
 
     Parameters
@@ -77,18 +78,18 @@ class Integrator[T: Interval](ABC):
     order: int
     series: tuple[IntervalSeries[T], ...] | None
     status: Literal["FAILURE", "RUNNING", "SUCCESS"]
-    t: T
-    t_bound: T
-    t_prev: T | None
-    y: tuple[T, ...]
+    t: Interval[T]
+    t_bound: Interval[T]
+    t_prev: Interval[T] | None
+    y: tuple[Interval[T], ...]
 
     @abstractmethod
     def __init__(
         self,
         fun: Callable,
-        t0: T,
-        y0: IntervalMatrix[T] | Sequence[T],
-        t_bound: T,
+        t0: Interval[T],
+        y0: IntervalMatrix[T] | Sequence[Interval[T]],
+        t_bound: Interval[T],
     ):
         raise NotImplementedError
 
@@ -107,7 +108,9 @@ class Integrator[T: Interval](ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def update(self, t: T, y: IntervalMatrix[T] | Sequence[T]) -> None:
+    def update(
+        self, t: Interval[T], y: IntervalMatrix[T] | Sequence[Interval[T]]
+    ) -> None:
         """Receive a state, usually refined by :class:`Tracker`.
 
         ``self.t`` and ``self.y`` are updated to `t` and `y`.
@@ -125,13 +128,13 @@ class Integrator[T: Interval](ABC):
         raise NotImplementedError
 
 
-def eilo[T: Interval = Any](
+def eilo[T: ComparableScalar](
     order: int = 15,
-    rtol: Any = 1e-10,
-    atol: Any = 1e-10,
+    rtol: T | float | int = 1e-10,
+    atol: T | float | int = 1e-10,
     max_tries: int = 5,
-    min_step: Any = 0.0,
-    max_step: Any = float("inf"),
+    min_step: T | None = None,
+    max_step: T | None = None,
 ) -> type[Integrator[T]]:
     r"""Integrator based on Eijgenraam and Lohner's algorithm.
 
@@ -180,7 +183,11 @@ def eilo[T: Interval = Any](
 
     class Result(_eilo[T]):
         def __init__(
-            self, fun: Callable, t0: T, y0: IntervalMatrix[T] | Sequence[T], t_bound: T
+            self,
+            fun: Callable,
+            t0: Interval[T],
+            y0: IntervalMatrix[T] | Sequence[Interval[T]],
+            t_bound: Interval[T],
         ):
             if not isinstance(t0, Interval):
                 raise TypeError
@@ -196,23 +203,27 @@ def eilo[T: Interval = Any](
             self.series = None
             self.order = order
             self._fun = fun
-            self._rtol = rtol
-            self._atol = atol
             self._max_tries = max_tries
-            self._min_step = min_step
-            self._max_step = max_step
 
-            if isinstance(rtol, float):
-                self._rtol = t0.converter.fromfloat(rtol, strict=False)
+            if isinstance(rtol, (float, int)):
+                self._rtol = t0.converter.fromfloat(float(rtol), strict=False)
+            else:
+                self._rtol = rtol
 
-            if isinstance(atol, float):
-                self._atol = t0.converter.fromfloat(atol, strict=False)
+            if isinstance(atol, (float, int)):
+                self._atol = t0.converter.fromfloat(float(atol), strict=False)
+            else:
+                self._atol = atol
 
-            if isinstance(min_step, float):
-                self._min_step = t0.converter.fromfloat(min_step)
+            if min_step is None:
+                self._min_step = t0.operator.ZERO
+            else:
+                self._min_step = min_step
 
-            if isinstance(max_step, float):
-                self._max_step = t0.converter.fromfloat(max_step)
+            if max_step is None:
+                self._max_step = t0.operator.INFINITY
+            else:
+                self._max_step = max_step
 
             if not t0.operator.ZERO <= min_step <= max_step:
                 raise ValueError
@@ -220,19 +231,19 @@ def eilo[T: Interval = Any](
     return Result
 
 
-class _eilo[T: Interval](Integrator[T], ABC):
+class _eilo[T: ComparableScalar](Integrator[T], ABC):
     status: Literal["FAILURE", "RUNNING", "SUCCESS"]
-    t: T
-    y: tuple[T, ...]
-    t_bound: T
-    t_prev: T | None
+    t: Interval[T]
+    y: tuple[Interval[T], ...]
+    t_bound: Interval[T]
+    t_prev: Interval[T] | None
     series: tuple[IntervalSeries[T], ...] | None
     order: int
     _fun: Callable
-    _rtol: Any
-    _atol: Any
-    _min_step: Any
-    _max_step: Any
+    _rtol: T
+    _atol: T
+    _min_step: T
+    _max_step: T
     _max_tries: int
 
     def step(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
@@ -314,7 +325,9 @@ class _eilo[T: Interval](Integrator[T], ABC):
         self.series = tuple(p0)
         return (True, None)
 
-    def update(self, t: T, y: IntervalMatrix[T] | Sequence[T]) -> None:
+    def update(
+        self, t: Interval[T], y: IntervalMatrix[T] | Sequence[Interval[T]]
+    ) -> None:
         if self.status == "FAILURE":
             raise RuntimeError
 
@@ -325,13 +338,13 @@ class _eilo[T: Interval](Integrator[T], ABC):
         self.y = tuple(x.copy() for x in y)
 
 
-def kashi[T: Interval = Any](
+def kashi[T: ComparableScalar](
     order: int = 15,
-    rtol: Any = 1e-10,
-    atol: Any = 1e-10,
+    rtol: T | float | int = 1e-10,
+    atol: T | float | int = 1e-10,
     max_tries: int = 5,
-    min_step: Any = 0.0,
-    max_step: Any = float("inf"),
+    min_step: T | None = None,
+    max_step: T | None = None,
 ) -> type[Integrator[T]]:
     r"""Integrator based on Kashiwagi's algorithm.
 
@@ -373,7 +386,11 @@ def kashi[T: Interval = Any](
 
     class Result(_kashi[T]):
         def __init__(
-            self, fun: Callable, t0: T, y0: IntervalMatrix[T] | Sequence[T], t_bound: T
+            self,
+            fun: Callable,
+            t0: Interval[T],
+            y0: IntervalMatrix[T] | Sequence[Interval[T]],
+            t_bound: Interval[T],
         ):
             if not isinstance(t0, Interval):
                 raise TypeError
@@ -395,17 +412,21 @@ def kashi[T: Interval = Any](
             self._min_step = min_step
             self._max_step = max_step
 
-            if isinstance(rtol, float):
-                self._rtol = t0.converter.fromfloat(rtol, strict=False)
+            if isinstance(rtol, (float, int)):
+                self._rtol = t0.converter.fromfloat(float(rtol), strict=False)
+            else:
+                self._rtol = rtol
 
-            if isinstance(atol, float):
-                self._atol = t0.converter.fromfloat(atol, strict=False)
+            if isinstance(atol, (float, int)):
+                self._atol = t0.converter.fromfloat(float(atol), strict=False)
+            else:
+                self._atol = atol
 
-            if isinstance(min_step, float):
-                self._min_step = t0.converter.fromfloat(min_step)
+            if min_step is None:
+                self._min_step = t0.operator.ZERO
 
-            if isinstance(max_step, float):
-                self._max_step = t0.converter.fromfloat(max_step)
+            if max_step is None:
+                self._max_step = t0.operator.INFINITY
 
             if not t0.operator.ZERO <= min_step <= max_step:
                 raise ValueError
@@ -413,19 +434,19 @@ def kashi[T: Interval = Any](
     return Result
 
 
-class _kashi[T: Interval](Integrator[T], ABC):
+class _kashi[T: ComparableScalar](Integrator[T], ABC):
     status: Literal["FAILURE", "RUNNING", "SUCCESS"]
-    t: T
-    y: tuple[T, ...]
-    t_bound: T
-    t_prev: T | None
+    t: Interval[T]
+    y: tuple[Interval[T], ...]
+    t_bound: Interval[T]
+    t_prev: Interval[T] | None
     series: tuple[IntervalSeries[T], ...] | None
     order: int
     _fun: Callable
-    _rtol: Any
-    _atol: Any
-    _min_step: Any
-    _max_step: Any
+    _rtol: T
+    _atol: T
+    _min_step: T
+    _max_step: T
     _max_tries: int
 
     def step(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
@@ -530,7 +551,9 @@ class _kashi[T: Interval](Integrator[T], ABC):
         self.status = "FAILURE"
         return (False, f"failed to verify within {self._max_tries} trials")
 
-    def update(self, t: T, y: IntervalMatrix[T] | Sequence[T]) -> None:
+    def update(
+        self, t: Interval[T], y: IntervalMatrix[T] | Sequence[Interval[T]]
+    ) -> None:
         if self.status == "FAILURE":
             raise RuntimeError
 

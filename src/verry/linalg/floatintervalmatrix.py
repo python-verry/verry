@@ -9,7 +9,7 @@ from verry.linalg.intervalmatrix import (
 )
 
 
-class FloatIntervalMatrix(IntervalMatrix[FloatInterval, float]):
+class FloatIntervalMatrix(IntervalMatrix[float]):
     """Double-precision inf-sup type interval matrix."""
 
     __slots__ = ()

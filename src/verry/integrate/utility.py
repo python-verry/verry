@@ -4,10 +4,14 @@ from verry.autodiff.autodiff import jacobian
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries, localcontext
 from verry.linalg.intervalmatrix import IntervalMatrix
+from verry.typing import ComparableScalar
 
 
-def seriessolution[T: Interval](
-    fun: Callable, t0: T, y0: IntervalMatrix[T] | Sequence[T], deg: int
+def seriessolution[T: ComparableScalar](
+    fun: Callable,
+    t0: Interval[T],
+    y0: IntervalMatrix[T] | Sequence[Interval[T]],
+    deg: int,
 ) -> tuple[IntervalSeries[T], ...]:
     """Return the Taylor polynomial of the ODE solution.
 
