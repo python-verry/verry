@@ -33,7 +33,7 @@ Context
 import contextlib
 import contextvars
 from collections.abc import Sequence
-from typing import Any, Literal, Never, Self
+from typing import Literal, Never, Self
 
 from verry import function as vrf
 from verry.interval.interval import Interval
@@ -122,7 +122,7 @@ def localcontext(
         _var.reset(token)
 
 
-class AffineForm[T1: Interval, T2: ComparableScalar = Any](Scalar):
+class AffineForm[T: ComparableScalar](Scalar):
     """Affine form.
 
     Parameters
@@ -145,13 +145,13 @@ class AffineForm[T1: Interval, T2: ComparableScalar = Any](Scalar):
     """
 
     __slots__ = ("_mid", "_coeffs", "_excess", "_intvl", "_context")
-    _mid: T2
-    _coeffs: dict[int, T2]
-    _excess: T2
-    _intvl: type[T1]
+    _mid: T
+    _coeffs: dict[int, T]
+    _excess: T
+    _intvl: type[Interval[T]]
     _context: Context
 
-    def __init__(self, value: T1, **kwargs: Never):
+    def __init__(self, value: Interval[T], **kwargs: Never):
         if kwargs.get("_skipinit", False):
             return
 
@@ -172,11 +172,11 @@ class AffineForm[T1: Interval, T2: ComparableScalar = Any](Scalar):
         return self._context
 
     @property
-    def interval(self) -> type[T1]:
+    def interval(self) -> type[Interval[T]]:
         return self._intvl
 
     @classmethod
-    def zero(cls, intvl: type[T1], ctx: Context | None = None) -> Self:
+    def zero(cls, intvl: type[Interval[T]], ctx: Context | None = None) -> Self:
         """Return an affine form consisting only of the constant term 0.
 
         Parameters
@@ -209,10 +209,10 @@ class AffineForm[T1: Interval, T2: ComparableScalar = Any](Scalar):
         result._excess = self._excess
         return result
 
-    def mid(self) -> T2:
+    def mid(self) -> T:
         return self._mid
 
-    def rad(self) -> T2:
+    def rad(self) -> T:
         """Return an upper bound of the radius."""
         result = self._excess
 
@@ -221,7 +221,7 @@ class AffineForm[T1: Interval, T2: ComparableScalar = Any](Scalar):
 
         return result
 
-    def range(self) -> T1:
+    def range(self) -> Interval[T]:
         """Return the range of the affine form.
 
         Example
@@ -328,7 +328,7 @@ class AffineForm[T1: Interval, T2: ComparableScalar = Any](Scalar):
         """Return the number of noise symbols."""
         return len(self._coeffs)
 
-    def __add__(self, rhs: Self | T1 | T2 | float | int) -> Self:
+    def __add__(self, rhs: Self | Interval[T] | T | float | int) -> Self:
         ZERO = self._intvl.operator.ZERO
         cadd = self._intvl.operator.cadd
 
@@ -385,7 +385,7 @@ class AffineForm[T1: Interval, T2: ComparableScalar = Any](Scalar):
             case _:
                 return NotImplemented
 
-    def __sub__(self, rhs: Self | T1 | T2 | float | int) -> Self:
+    def __sub__(self, rhs: Self | Interval[T] | T | float | int) -> Self:
         ZERO = self._intvl.operator.ZERO
         cadd = self._intvl.operator.cadd
 
@@ -442,7 +442,7 @@ class AffineForm[T1: Interval, T2: ComparableScalar = Any](Scalar):
             case _:
                 return NotImplemented
 
-    def __mul__(self, rhs: Self | T1 | T2 | float | int) -> Self:
+    def __mul__(self, rhs: Self | Interval[T] | T | float | int) -> Self:
         ZERO = self._intvl.operator.ZERO
         cadd = self._intvl.operator.cadd
         cmul = self._intvl.operator.cmul
@@ -503,7 +503,7 @@ class AffineForm[T1: Interval, T2: ComparableScalar = Any](Scalar):
             case _:
                 return NotImplemented
 
-    def __truediv__(self, rhs: Self | T1 | T2 | float | int) -> Self:
+    def __truediv__(self, rhs: Self | Interval[T] | T | float | int) -> Self:
         match rhs:
             case self._intvl.endtype() | float() | int():
                 return self.__mul__(1 / self._intvl(rhs))
@@ -536,16 +536,16 @@ class AffineForm[T1: Interval, T2: ComparableScalar = Any](Scalar):
 
         return result
 
-    def __radd__(self, lhs: Self | T1 | T2 | float | int) -> Self:
+    def __radd__(self, lhs: Self | Interval[T] | T | float | int) -> Self:
         return self.__add__(lhs)
 
-    def __rsub__(self, lhs: Self | T1 | T2 | float | int) -> Self:
+    def __rsub__(self, lhs: Self | Interval[T] | T | float | int) -> Self:
         return self.__neg__().__add__(lhs)
 
-    def __rmul__(self, lhs: Self | T1 | T2 | float | int) -> Self:
+    def __rmul__(self, lhs: Self | Interval[T] | T | float | int) -> Self:
         return self.__mul__(lhs)
 
-    def __rtruediv__(self, lhs: Self | T1 | T2 | float | int) -> Self:
+    def __rtruediv__(self, lhs: Self | Interval[T] | T | float | int) -> Self:
         return self.reciprocal().__mul__(lhs)
 
     def __neg__(self) -> Self:

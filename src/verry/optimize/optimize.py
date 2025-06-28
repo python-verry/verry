@@ -1,22 +1,22 @@
 import itertools
 from collections.abc import Callable
-from typing import Any
 
 import numpy as np
 
 from verry.autodiff.autodiff import deriv, grad
 from verry.interval.interval import Interval
 from verry.linalg.intervalmatrix import IntervalMatrix
+from verry.typing import ComparableScalar
 
 
-def branchbound[T: Interval](
+def branchbound[T: ComparableScalar](
     fun: Callable,
     domain: IntervalMatrix[T],
     fprime: Callable | bool = True,
-    xtol: Any = float("inf"),
-    ytol: Any = 0.0,
+    xtol: T | float | int = float("inf"),
+    ytol: T | float | int = 0.0,
     max_iter: int = 16,
-) -> tuple[T, list[IntervalMatrix[T]]]:
+) -> tuple[Interval[T], list[IntervalMatrix[T]]]:
     """Find the minimum of the multivariate scalar-valued function by repeatedly
     dividing the interval vector.
 
@@ -138,14 +138,14 @@ def branchbound[T: Interval](
     return intvl(inf, sup), argmins
 
 
-def branchbound_scalar[T: Interval](
+def branchbound_scalar[T: ComparableScalar](
     fun: Callable,
-    domain: T,
+    domain: Interval[T],
     fprime: Callable | bool = True,
-    xtol: Any = float("inf"),
-    ytol: Any = 0.0,
+    xtol: T | float | int = float("inf"),
+    ytol: T | float | int = 0.0,
     max_iter: int = 16,
-) -> tuple[T, list[T]]:
+) -> tuple[Interval[T], list[Interval[T]]]:
     """Find the minimum of the univariate scalar-valued function by repeatedly
     dividing the interval.
 
@@ -194,7 +194,7 @@ def branchbound_scalar[T: Interval](
     if not isinstance(domain, Interval):
         raise TypeError
 
-    intvl: type[T] = type(domain)
+    intvl = type(domain)
     ZERO = domain.operator.ZERO
     INFINITY = domain.operator.INFINITY
 
@@ -218,13 +218,13 @@ def branchbound_scalar[T: Interval](
 
     branches = [domain]
     bound = inf = sup = INFINITY
-    argmins: list[T] = []
+    argmins: list[Interval[T]] = []
 
     for i in range(max_iter):
         if not branches:
             break
 
-        next_branches: list[T] = []
+        next_branches: list[Interval[T]] = []
 
         for x in branches:
             y = fun(x)

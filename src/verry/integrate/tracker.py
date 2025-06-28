@@ -1,7 +1,7 @@
 import inspect
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Any, ClassVar, TypeIs
+from typing import Any, TypeIs
 
 import numpy.typing as npt
 
@@ -77,21 +77,27 @@ def affinetracker[T: IntervalMatrix = Any](
 ) -> type[Tracker[T]]:
     """Tracker using affine arithmetic, usually producing the most accurate result."""
 
-    class Result(_affinetracker[T], n=n, m=m):
+    class Result(_affinetracker[T]):
         __slots__ = ()
+
+        def __init__(self, x0):
+            super().__init__(x0)
+            self._n = n
+            self._m = m
 
     return Result
 
 
 class _affinetracker[T: IntervalMatrix](Tracker[T], ABC):
-    __slots__ = ("_context", "_current", "_matrix")
-    _cls_n: ClassVar[int | None]
-    _cls_m: ClassVar[int]
+    __slots__ = ("_context", "_current", "_matrix", "_n", "_m")
     _context: Context
     _current: list[AffineForm]
     _matrix: type[T]
+    _n: int | None
+    _m: int
 
-    def __init__(self, x0):
+    @abstractmethod
+    def __init__(self, x0: T):
         ctx = getcontext()
         self._context = ctx.copy()
         self._matrix = type(x0)
@@ -134,17 +140,12 @@ class _affinetracker[T: IntervalMatrix](Tracker[T], ABC):
                 tmp += sum(a[i, j] * curr[j] for j in range(n))
                 next.append(tmp)
 
-            if self._cls_n is not None:
-                summarize(next, self._cls_n, self._cls_m)
+            if self._n is not None:
+                summarize(next, self._n, self._m)
 
             self._current = next
         finally:
             setcontext(ctx)
-
-    def __init_subclass__(cls, /, n: int | None, m: int, **kwargs):
-        super().__init_subclass__(**kwargs)
-        cls._cls_n = n
-        cls._cls_m = m
 
 
 class directtracker[T: IntervalMatrix](Tracker[T]):
@@ -232,9 +233,9 @@ class qrtracker[T: IntervalMatrix](Tracker[T]):
         self._r = (p1 @ a @ q0) @ self._r + p1 @ (b - self._m)
 
 
-def doubletontracker[T: IntervalMatrix = Any](
+def doubletontracker(
     tracker: Callable[[], type[Tracker]] | type[Tracker] | None = None,
-) -> type[Tracker[T]]:
+) -> type[Tracker]:
     """Tracker suitable for large initial intervals.
 
     This is an implementation of Evaluation 4 in [#Lo87]_, and the name "doubleton" is
@@ -270,25 +271,28 @@ def doubletontracker[T: IntervalMatrix = Any](
     if not issubclass(tracker, Tracker):
         raise TypeError
 
-    class Result(_doubletontracker, tracker=tracker):
+    class Result(_doubletontracker):
         __slots__ = ()
+
+        def __init__(self, x0):
+            super().__init__(x0)
+            self._tracker = tracker(x0.zeros_like())
 
     return Result
 
 
 class _doubletontracker[T: IntervalMatrix](Tracker[T], ABC):
     __slots__ = ("_c", "_m", "_r0", "_tracker")
-    _cls_tracker: ClassVar[type[Tracker]]
-    _tracker: Tracker[T]
     _c: T
     _m: npt.NDArray
     _r0: T
+    _tracker: Tracker[T]
 
+    @abstractmethod
     def __init__(self, x0: T):
         self._c = x0.eye(len(x0))
         self._m = x0.mid()
         self._r0 = x0 - self._m
-        self._tracker = self._cls_tracker(x0.zeros_like())
 
     def hull(self) -> T:
         return self._m + self._tracker.hull() + self._c @ self._r0
@@ -312,7 +316,3 @@ class _doubletontracker[T: IntervalMatrix](Tracker[T], ABC):
         self._m = b.mid()
         tmp = b - self._m + (a @ c0 - c1) @ self._r0 + a @ self._tracker.sample()
         self._tracker.update(a, tmp)
-
-    def __init_subclass__(cls, /, tracker: type[Tracker], **kwargs):
-        super().__init_subclass__(**kwargs)
-        cls._cls_tracker = tracker

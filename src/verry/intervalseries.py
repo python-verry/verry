@@ -31,26 +31,26 @@ Context
 import contextlib
 import contextvars
 from collections.abc import Sequence
-from typing import Any, Literal, Self, overload
+from typing import Literal, Self, overload
 
 from verry import function as vrf
 from verry.interval.interval import Interval
 from verry.typing import Scalar, SignedComparable
 
 
-class Context[T: Interval]:
+class Context[T: SignedComparable]:
     """Create a new context."""
 
     __slots__ = ("rounding", "deg", "domain")
     rounding: Literal["TYPE1", "TYPE2"]
     deg: int
-    domain: T | None
+    domain: Interval[T] | None
 
     def __init__(
         self,
         rounding: Literal["TYPE1", "TYPE2"] = "TYPE1",
         deg: int = 15,
-        domain: T | None = None,
+        domain: Interval[T] | None = None,
     ):
         self.rounding = rounding
         self.deg = deg
@@ -136,7 +136,7 @@ def localcontext(
         _var.reset(token)
 
 
-class IntervalSeries[T1: Interval, T2: SignedComparable = Any](Scalar):
+class IntervalSeries[T: SignedComparable](Scalar):
     """Interval series.
 
     Parameters
@@ -148,10 +148,14 @@ class IntervalSeries[T1: Interval, T2: SignedComparable = Any](Scalar):
     """
 
     __slots__ = ("coeffs", "_intvl")
-    coeffs: list[T1]
-    _intvl: type[T1]
+    coeffs: list[Interval[T]]
+    _intvl: type[Interval[T]]
 
-    def __init__(self, coeffs: Sequence[T1 | T2 | int | float | str], intvl: type[T1]):
+    def __init__(
+        self,
+        coeffs: Sequence[Interval[T] | T | float | int | str],
+        intvl: type[Interval[T]],
+    ):
         if not issubclass(intvl, Interval):
             raise TypeError
 
@@ -159,7 +163,7 @@ class IntervalSeries[T1: Interval, T2: SignedComparable = Any](Scalar):
         self._intvl = intvl
 
     @property
-    def interval(self) -> type[T1]:
+    def interval(self) -> type[Interval[T]]:
         return self._intvl
 
     def __str__(self) -> str:
@@ -194,7 +198,7 @@ class IntervalSeries[T1: Interval, T2: SignedComparable = Any](Scalar):
         """Return a copy of the series."""
         return self.__class__([x.copy() for x in self.coeffs], intvl=self._intvl)
 
-    def eval(self, arg: T1 | T2 | int | float) -> T1:
+    def eval(self, arg: Interval[T] | T | float | int) -> Interval[T]:
         """Return an interval containing the image of `arg`.
 
         See Also
@@ -304,7 +308,7 @@ class IntervalSeries[T1: Interval, T2: SignedComparable = Any](Scalar):
         if (n := deg + 1) < len(self.coeffs):
             del self.coeffs[n:]
 
-    def round_type2(self, deg: int, domain: T1) -> None:
+    def round_type2(self, deg: int, domain: Interval[T]) -> None:
         """Round the series in Type-II PSA. This method modifies the series in-place.
 
         Parameters
@@ -364,7 +368,7 @@ class IntervalSeries[T1: Interval, T2: SignedComparable = Any](Scalar):
     def __call__(self, arg: Self) -> Self: ...
 
     @overload
-    def __call__(self, arg: T1 | T2 | int | float) -> T1: ...
+    def __call__(self, arg: Interval[T] | T | float | int) -> Interval[T]: ...
 
     def __call__(self, arg):
         """Return ``compose(arg)`` or ``eval(arg)`` depending on the type of `arg`.
@@ -383,7 +387,7 @@ class IntervalSeries[T1: Interval, T2: SignedComparable = Any](Scalar):
             case _:
                 raise TypeError
 
-    def __add__(self, rhs: Self | T1 | T2 | int | float) -> Self:
+    def __add__(self, rhs: Self | Interval[T] | T | float | int) -> Self:
         match rhs:
             case self._intvl.endtype() | self._intvl() | int() | float():
                 result = self.copy()
@@ -406,7 +410,7 @@ class IntervalSeries[T1: Interval, T2: SignedComparable = Any](Scalar):
             case _:
                 return NotImplemented
 
-    def __sub__(self, rhs: Self | T1 | T2 | int | float) -> Self:
+    def __sub__(self, rhs: Self | Interval[T] | T | float | int) -> Self:
         match rhs:
             case self._intvl.endtype() | self._intvl() | int() | float():
                 result = self.copy()
@@ -429,7 +433,7 @@ class IntervalSeries[T1: Interval, T2: SignedComparable = Any](Scalar):
             case _:
                 return NotImplemented
 
-    def __mul__(self, rhs: Self | T1 | T2 | int | float) -> Self:
+    def __mul__(self, rhs: Self | Interval[T] | T | float | int) -> Self:
         match rhs:
             case self._intvl.endtype() | self._intvl() | int() | float():
                 return self.__class__([x * rhs for x in self.coeffs], intvl=self._intvl)
@@ -449,7 +453,7 @@ class IntervalSeries[T1: Interval, T2: SignedComparable = Any](Scalar):
             case _:
                 return NotImplemented
 
-    def __truediv__(self, rhs: Self | T1 | T2 | int | float) -> Self:
+    def __truediv__(self, rhs: Self | Interval[T] | T | float | int) -> Self:
         match rhs:
             case self._intvl.endtype() | self._intvl() | int() | float():
                 return self.__class__([x / rhs for x in self.coeffs], intvl=self._intvl)
@@ -479,16 +483,16 @@ class IntervalSeries[T1: Interval, T2: SignedComparable = Any](Scalar):
 
         return result
 
-    def __radd__(self, lhs: Self | T1 | T2 | int | float) -> Self:
+    def __radd__(self, lhs: Self | Interval[T] | T | float | int) -> Self:
         return self.__add__(lhs)
 
-    def __rsub__(self, lhs: Self | T1 | T2 | int | float) -> Self:
+    def __rsub__(self, lhs: Self | Interval[T] | T | float | int) -> Self:
         return self.__neg__().__add__(lhs)
 
-    def __rmul__(self, lhs: Self | T1 | T2 | int | float) -> Self:
+    def __rmul__(self, lhs: Self | Interval[T] | T | float | int) -> Self:
         return self.__mul__(lhs)
 
-    def __rtruediv__(self, lhs: Self | T1 | T2 | int | float) -> Self:
+    def __rtruediv__(self, lhs: Self | Interval[T] | T | float | int) -> Self:
         return self.reciprocal().__mul__(lhs)
 
     def __neg__(self) -> Self:
