@@ -33,7 +33,7 @@ Context
 import contextlib
 import contextvars
 from collections.abc import Sequence
-from typing import Any, Literal, Never, Self
+from typing import Literal, Never, Self
 
 from verry import function as vrf
 from verry.interval.interval import Interval

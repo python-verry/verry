@@ -6,10 +6,11 @@ from typing import Literal
 from verry.autodiff.autodiff import deriv, jacobian
 from verry.interval.interval import Interval
 from verry.linalg.intervalmatrix import IntervalMatrix, LinAlgError, approx_inv
+from verry.typing import ComparableScalar
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class AllRootResult[T: IntervalMatrix]:
+class AllRootResult[T: ComparableScalar]:
     """Output of :func:`allroot`.
 
     Attributes
@@ -22,13 +23,13 @@ class AllRootResult[T: IntervalMatrix]:
         Interval vectors in which the existence of roots could not be verified.
     """
 
-    exists: list[T] = dataclasses.field(default_factory=list)
-    unique: list[T] = dataclasses.field(default_factory=list)
-    unknown: list[T] = dataclasses.field(default_factory=list)
+    exists: list[IntervalMatrix[T]] = dataclasses.field(default_factory=list)
+    unique: list[IntervalMatrix[T]] = dataclasses.field(default_factory=list)
+    unknown: list[IntervalMatrix[T]] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class AllRootScalarResult[T: Interval]:
+class AllRootScalarResult[T: ComparableScalar]:
     """Output of :func:`allroot_scalar`.
 
     Attributes
@@ -41,18 +42,18 @@ class AllRootScalarResult[T: Interval]:
         Intervals in which the existence of roots could not be verified.
     """
 
-    exists: list[T] = dataclasses.field(default_factory=list)
-    unique: list[T] = dataclasses.field(default_factory=list)
-    unknown: list[T] = dataclasses.field(default_factory=list)
+    exists: list[Interval[T]] = dataclasses.field(default_factory=list)
+    unique: list[Interval[T]] = dataclasses.field(default_factory=list)
+    unknown: list[Interval[T]] = dataclasses.field(default_factory=list)
 
 
-def allroot[T: IntervalMatrix](
+def allroot[T: ComparableScalar](
     fun: Callable,
-    domain: T,
+    domain: IntervalMatrix[T],
     fprime: Callable | None = None,
     unique: bool = False,
     max_iter: int = 16,
-) -> AllRootScalarResult[T]:
+) -> AllRootResult[T]:
     """Find all roots of multivariate scalar-valued function.
 
     Parameters
@@ -100,7 +101,7 @@ def allroot[T: IntervalMatrix](
     if domain.ndim != 1:
         raise ValueError
 
-    intvlmat: type[T] = type(domain)
+    intvlmat = type(domain)
     intvl = domain.interval
 
     if fprime is None:
@@ -116,7 +117,7 @@ def allroot[T: IntervalMatrix](
         if not cands:
             break
 
-        next_cands: list[T] = []
+        next_cands: list[IntervalMatrix[T]] = []
 
         for x in cands:
             match krawczyk(fun, x, fprime):
@@ -147,9 +148,9 @@ def allroot[T: IntervalMatrix](
     return result
 
 
-def allroot_scalar[T: Interval](
+def allroot_scalar[T: ComparableScalar](
     fun: Callable,
-    domain: T,
+    domain: Interval[T],
     fprime: Callable | None = None,
     unique: bool = False,
     max_iter: int = 16,
@@ -198,7 +199,7 @@ def allroot_scalar[T: Interval](
     if not isinstance(domain, Interval):
         raise TypeError
 
-    intvl: type[T] = type(domain)
+    intvl = type(domain)
 
     if fprime is None:
         fprime = deriv(fun)
@@ -207,13 +208,13 @@ def allroot_scalar[T: Interval](
         raise ValueError
 
     cands = [domain]
-    result = AllRootScalarResult()
+    result: AllRootScalarResult[T] = AllRootScalarResult()
 
     for i in range(max_iter):
         if not cands:
             break
 
-        next_cands: list[T] = []
+        next_cands: list[Interval[T]] = []
 
         for x in cands:
             match krawczyk_scalar(fun, x, fprime):
@@ -250,9 +251,11 @@ type _TestResult[T] = (
 )
 
 
-def krawczyk[T: IntervalMatrix](
-    fun: Callable, x: T, fprime: Callable | T | None = None
-) -> _TestResult[T]:
+def krawczyk[T: ComparableScalar](
+    fun: Callable,
+    x: IntervalMatrix[T],
+    fprime: Callable | IntervalMatrix[T] | None = None,
+) -> _TestResult[IntervalMatrix[T]]:
     """Apply the Krawczyk test to the multivariate vector-valued function.
 
     Parameters
@@ -327,9 +330,9 @@ def krawczyk[T: IntervalMatrix](
     return ("UNKNOWN", None)
 
 
-def krawczyk_scalar[T: Interval](
-    fun: Callable, x: T, fprime: Callable | T | None = None
-) -> _TestResult[T]:
+def krawczyk_scalar[T: ComparableScalar](
+    fun: Callable, x: Interval[T], fprime: Callable | Interval[T] | None = None
+) -> _TestResult[Interval[T]]:
     """Apply the Krawczyk test to the univariate scalar-valued function.
 
     Parameters
