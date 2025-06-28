@@ -2,7 +2,7 @@ import dataclasses
 import inspect
 import itertools
 from collections.abc import Callable, Sequence
-from typing import Any, Literal, TypeIs, overload
+from typing import Literal, TypeIs, no_type_check
 
 from verry.integrate.integrator import Integrator, kashi
 from verry.integrate.tracker import Tracker, doubletontracker
@@ -10,6 +10,7 @@ from verry.integrate.utility import seriessolution, variationaleq
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries
 from verry.linalg.intervalmatrix import IntervalMatrix, resolve_intervalmatrix
+from verry.typing import ComparableScalar
 
 
 class AbortSolving(Exception):
@@ -27,7 +28,7 @@ class AbortSolving(Exception):
         self.message = message
 
 
-class OdeSolution[T: Interval]:
+class OdeSolution[T: ComparableScalar]:
     """Solution of ODEs.
 
     Attributes
@@ -39,21 +40,23 @@ class OdeSolution[T: Interval]:
     """
 
     __slots__ = ("ts", "series")
-    ts: list
+    ts: list[T]
     series: list[tuple[IntervalSeries[T], ...]]
 
-    def __init__(self, ts: Sequence, series: Sequence[tuple[IntervalSeries[T], ...]]):
+    def __init__(
+        self, ts: Sequence[T], series: Sequence[tuple[IntervalSeries[T], ...]]
+    ):
         self.ts = list(ts)
         self.series = list(series)
 
-    def __call__(self, arg: Any) -> tuple[T, ...]:
+    def __call__(self, arg: Interval[T] | T | float | int) -> tuple[Interval[T], ...]:
         """Return the value that the solution takes in `arg`."""
         if isinstance(arg, str):
             raise TypeError
 
         intvl = self.series[0][0].interval
         arg = intvl.ensure(arg)
-        result: list[T] | None = None
+        result: list[Interval[T]] | None = None
 
         for ts, series in zip(itertools.pairwise(self.ts), self.series):
             if (domain := intvl(ts[0], ts[1])).isdisjoint(arg):
@@ -89,7 +92,7 @@ class SolverResult[T1, T2: Literal["ABORTED", "FAILURE", "SUCCESS"]]:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class C0SolverResultContent[T: Interval]:
+class C0SolverResultContent[T: ComparableScalar]:
     """Information obtained when :class:`C0Solver` successfully worked.
 
     Attributes
@@ -102,13 +105,13 @@ class C0SolverResultContent[T: Interval]:
         Solution of ODEs.
     """
 
-    t: T
-    y: tuple[T, ...]
+    t: Interval[T]
+    y: tuple[Interval[T], ...]
     sol: OdeSolution[T]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class C0SolverCallbackArg[T: Interval]:
+class C0SolverCallbackArg[T: ComparableScalar]:
     """Argument of callback functions passed to :meth:`C0Solver.solve`.
 
     Attributes
@@ -123,9 +126,9 @@ class C0SolverCallbackArg[T: Interval]:
         Current interval series.
     """
 
-    t: T
-    y: tuple[T, ...]
-    t_prev: T
+    t: Interval[T]
+    y: tuple[Interval[T], ...]
+    t_prev: Interval[T]
     series: tuple[IntervalSeries[T], ...]
 
 
@@ -177,12 +180,12 @@ class C0Solver:
         self._integrator = integrator
         self._tracker = tracker
 
-    def solve[T: Interval](
+    def solve[T: ComparableScalar](
         self,
         fun: Callable,
-        t0: T,
-        y0: IntervalMatrix[T] | Sequence[T],
-        t_bound: T,
+        t0: Interval[T],
+        y0: IntervalMatrix[T] | Sequence[Interval[T]],
+        t_bound: Interval[T],
         callback: Callable[[C0SolverCallbackArg[T]], None] | None = None,
     ) -> (
         SolverResult[None, Literal["ABORTED"]]
@@ -241,6 +244,10 @@ class C0Solver:
         >>> print(r.message)
         failed to determine a step size
         """
+        return self.__solve(fun, t0, y0, t_bound, callback)
+
+    @no_type_check
+    def __solve(self, fun, t0, y0, t_bound, callback):
         if not isinstance(t0, Interval):
             raise TypeError
 
@@ -263,14 +270,14 @@ class C0Solver:
             u0 = itor.t_prev
             u1 = itor.t
 
-            varfun = variationaleq(fun, lambda t: tuple(x(t - u0) for x in itor.series))  # type: ignore
+            varfun = variationaleq(fun, lambda t: tuple(x(t - u0) for x in itor.series))
             tmp = seriessolution(fun, u0, tracker.sample(), itor.order - 1)
             a1 = intvlmat([x.eval(u1 - u0) for x in tmp])
             jac = eye.empty_like()
 
             for i in range(len(y0)):
                 tmp = seriessolution(varfun, u0, eye[i], itor.order - 1)
-                a1[i] += itor.series[i].coeffs[-1] * (u1 - u0) ** itor.order  # type: ignore
+                a1[i] += itor.series[i].coeffs[-1] * (u1 - u0) ** itor.order
                 jac[:, i] = intvlmat([x.eval(u1 - u0) for x in tmp])
 
             tracker.update(jac, a1)
@@ -281,19 +288,17 @@ class C0Solver:
 
             if callback is not None:
                 try:
-                    callback(C0SolverCallbackArg(u1, y1, u0, itor.series))  # type: ignore
+                    callback(C0SolverCallbackArg(u1, y1, u0, itor.series))
                 except AbortSolving as exc:
                     return SolverResult("ABORTED", None, exc.message)
 
-        sol = OdeSolution(ts, series)  # type: ignore
+        sol = OdeSolution(ts, series)
         content = C0SolverResultContent(itor.t, itor.y, sol)
         return SolverResult("SUCCESS", content, "success")
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class C1SolverResultContent[T1: Interval, T2: IntervalMatrix[T1] = IntervalMatrix[T1]]:  # type: ignore
-    # TODO: This "type: ignore" must be removed when mypy supports PEP 696.
-    #       See https://github.com/python/mypy/issues/14851
+class C1SolverResultContent[T: ComparableScalar]:
     """Information obtained when :class:`C1Solver` successfully worked.
 
     Attributes
@@ -308,16 +313,14 @@ class C1SolverResultContent[T1: Interval, T2: IntervalMatrix[T1] = IntervalMatri
         Jacobian matrix of flow with respect to initial values.
     """
 
-    t: T1
-    y: tuple[T1, ...]
-    sol: OdeSolution[T1]
-    jac: T2
+    t: Interval[T]
+    y: tuple[Interval[T], ...]
+    sol: OdeSolution[T]
+    jac: IntervalMatrix[T]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class C1SolverCallbackArg[T1: Interval, T2: IntervalMatrix[T1] = IntervalMatrix[T1]]:  # type: ignore
-    # TODO: This "type: ignore" must be removed when mypy supports PEP 696.
-    #       See https://github.com/python/mypy/issues/14851
+class C1SolverCallbackArg[T: ComparableScalar]:
     """Argument of callback functions passed to :meth:`C1Solver.solve`.
 
     Attributes
@@ -336,12 +339,12 @@ class C1SolverCallbackArg[T1: Interval, T2: IntervalMatrix[T1] = IntervalMatrix[
         Jacobian matrix of flow with respect to initial values.
     """
 
-    t: T1
-    y: tuple[T1, ...]
-    t_prev: T1
-    series: tuple[IntervalSeries[T1], ...]
-    jac: T2
-    totjac: T2
+    t: Interval[T]
+    y: tuple[Interval[T], ...]
+    t_prev: Interval[T]
+    series: tuple[IntervalSeries[T], ...]
+    jac: IntervalMatrix[T]
+    totjac: IntervalMatrix[T]
 
 
 class C1Solver:
@@ -392,37 +395,18 @@ class C1Solver:
         self._integrator = integrator
         self._tracker = tracker
 
-    @overload
-    def solve[T: Interval](
+    def solve[T: ComparableScalar](
         self,
         fun: Callable,
-        t0: T,
-        y0: Sequence[T],
-        t_bound: T,
-        callback: Callable[[C1SolverCallbackArg[T]], None] | None = ...,
+        t0: Interval[T],
+        y0: IntervalMatrix[T] | Sequence[Interval[T]],
+        t_bound: Interval[T],
+        callback: Callable[[C1SolverCallbackArg[T]], None] | None = None,
     ) -> (
         SolverResult[None, Literal["ABORTED"]]
         | SolverResult[None, Literal["FAILURE"]]
         | SolverResult[C1SolverResultContent[T], Literal["SUCCESS"]]
-    ): ...
-
-    @overload
-    def solve[T1: Interval, T2: IntervalMatrix[T1]](  # type: ignore
-        # TODO: This "type: ignore" must be removed when mypy supports PEP 696.
-        #       See https://github.com/python/mypy/issues/14851
-        self,
-        fun: Callable,
-        t0: T1,
-        y0: T2,
-        t_bound: T1,
-        callback: Callable[[C1SolverCallbackArg[T1, T2]], None] | None = ...,
-    ) -> (
-        SolverResult[None, Literal["ABORTED"]]
-        | SolverResult[None, Literal["FAILURE"]]
-        | SolverResult[C1SolverResultContent[T1, T2], Literal["SUCCESS"]]
-    ): ...
-
-    def solve(self, fun, t0, y0, t_bound, callback=None):
+    ):
         r"""Solve an initial value problem for a system of ODEs.
 
         Parameters
@@ -475,6 +459,10 @@ class C1Solver:
         >>> print(r.message)
         failed to determine a step size
         """
+        return self.__solve(fun, t0, y0, t_bound, callback)
+
+    @no_type_check
+    def __solve(self, fun, t0, y0, t_bound, callback):
         if not isinstance(t0, Interval):
             raise TypeError
 

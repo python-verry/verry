@@ -205,27 +205,47 @@ def eilo[T: ComparableScalar](
             self._fun = fun
             self._max_tries = max_tries
 
-            if isinstance(rtol, (float, int)):
-                self._rtol = t0.converter.fromfloat(float(rtol), strict=False)
-            else:
-                self._rtol = rtol
+            match rtol:
+                case t0.endtype():
+                    self._rtol = rtol
 
-            if isinstance(atol, (float, int)):
-                self._atol = t0.converter.fromfloat(float(atol), strict=False)
-            else:
-                self._atol = atol
+                case float() | int():
+                    self._rtol = t0.converter.fromfloat(float(rtol), strict=False)
 
-            if min_step is None:
-                self._min_step = t0.operator.ZERO
-            else:
-                self._min_step = min_step
+                case _:
+                    raise TypeError
 
-            if max_step is None:
-                self._max_step = t0.operator.INFINITY
-            else:
-                self._max_step = max_step
+            match atol:
+                case t0.endtype():
+                    self._atol = atol
 
-            if not t0.operator.ZERO <= min_step <= max_step:
+                case float() | int():
+                    self._atol = t0.converter.fromfloat(float(atol), strict=False)
+
+                case _:
+                    raise TypeError
+
+            match min_step:
+                case t0.endtype():
+                    self._min_step = min_step
+
+                case None:
+                    self._min_step = t0.operator.ZERO
+
+                case _:
+                    raise TypeError
+
+            match max_step:
+                case t0.endtype():
+                    self._max_step = max_step
+
+                case None:
+                    self._max_step = t0.operator.INFINITY
+
+                case _:
+                    raise TypeError
+
+            if not t0.operator.ZERO <= self._min_step <= self._max_step:
                 raise ValueError
 
     return Result
@@ -406,29 +426,49 @@ def kashi[T: ComparableScalar](
             self.series = None
             self.order = order
             self._fun = fun
-            self._rtol = rtol
-            self._atol = atol
             self._max_tries = max_tries
-            self._min_step = min_step
-            self._max_step = max_step
 
-            if isinstance(rtol, (float, int)):
-                self._rtol = t0.converter.fromfloat(float(rtol), strict=False)
-            else:
-                self._rtol = rtol
+            match rtol:
+                case t0.endtype():
+                    self._rtol = rtol
 
-            if isinstance(atol, (float, int)):
-                self._atol = t0.converter.fromfloat(float(atol), strict=False)
-            else:
-                self._atol = atol
+                case float() | int():
+                    self._rtol = t0.converter.fromfloat(float(rtol), strict=False)
 
-            if min_step is None:
-                self._min_step = t0.operator.ZERO
+                case _:
+                    raise TypeError
 
-            if max_step is None:
-                self._max_step = t0.operator.INFINITY
+            match atol:
+                case t0.endtype():
+                    self._atol = atol
 
-            if not t0.operator.ZERO <= min_step <= max_step:
+                case float() | int():
+                    self._atol = t0.converter.fromfloat(float(atol), strict=False)
+
+                case _:
+                    raise TypeError
+
+            match min_step:
+                case t0.endtype():
+                    self._min_step = min_step
+
+                case None:
+                    self._min_step = t0.operator.ZERO
+
+                case _:
+                    raise TypeError
+
+            match max_step:
+                case t0.endtype():
+                    self._max_step = max_step
+
+                case None:
+                    self._max_step = t0.operator.INFINITY
+
+                case _:
+                    raise TypeError
+
+            if not t0.operator.ZERO <= self._min_step <= self._max_step:
                 raise ValueError
 
     return Result
@@ -456,7 +496,7 @@ class _kashi[T: ComparableScalar](Integrator[T], ABC):
         csub = self.t.operator.csub
 
         p0 = seriessolution(self._fun, self.t, self.y, self.order)
-        tmp = ZERO
+        tmp: Any = ZERO
 
         for i in (self.order, self.order - 1, self.order - 2):
             tmp = max(tmp, vrf.pow(max(x.coeffs[i].mag() for x in p0), 1 / i))
