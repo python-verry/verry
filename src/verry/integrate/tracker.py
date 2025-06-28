@@ -1,7 +1,7 @@
 import inspect
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Any, ClassVar, TypeIs
+from typing import Any, TypeIs
 
 import numpy.typing as npt
 
