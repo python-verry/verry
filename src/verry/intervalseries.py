@@ -35,10 +35,10 @@ from typing import Literal, Self, overload
 
 from verry import function as vrf
 from verry.interval.interval import Interval
-from verry.typing import Scalar, SignedComparable
+from verry.typing import ComparableScalar, Scalar
 
 
-class Context[T: SignedComparable]:
+class Context[T: ComparableScalar]:
     """Create a new context."""
 
     __slots__ = ("rounding", "deg", "domain")
@@ -136,7 +136,7 @@ def localcontext(
         _var.reset(token)
 
 
-class IntervalSeries[T: SignedComparable](Scalar):
+class IntervalSeries[T: ComparableScalar](Scalar):
     """Interval series.
 
     Parameters

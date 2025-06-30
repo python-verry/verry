@@ -4,7 +4,7 @@ from typing import Final, Literal, Self
 
 from verry import function as vrf
 from verry.misc.formatspec import FormatSpec
-from verry.typing import Scalar, SignedComparable
+from verry.typing import ComparableScalar, Scalar
 
 
 class RoundingMode(enum.Enum):
@@ -30,7 +30,7 @@ ROUND_FAST: Final = RoundingMode.ROUND_FAST
 ROUND_FLOOR: Final = RoundingMode.ROUND_FLOOR
 
 
-class Converter[T: SignedComparable](ABC):
+class Converter[T: ComparableScalar](ABC):
     """Provides numeric/numeric and numeric/string conversions."""
 
     __slots__ = ()
@@ -84,7 +84,7 @@ class Converter[T: SignedComparable](ABC):
         raise NotImplementedError
 
 
-class Operator[T: SignedComparable](ABC):
+class Operator[T: ComparableScalar](ABC):
     """Provides arithmetic with directed rounding and basic constants.
 
     Notes
@@ -159,7 +159,7 @@ class Operator[T: SignedComparable](ABC):
         raise NotImplementedError
 
 
-class Interval[T: SignedComparable](Scalar, ABC):
+class Interval[T: ComparableScalar](Scalar, ABC):
     """Abstract base class for inf-sup type intervals.
 
     Parameters

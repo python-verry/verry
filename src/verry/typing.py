@@ -9,10 +9,6 @@ This module provides type definitions commonly used between modules.
     :show-inheritance:
     :no-members:
 
-.. autoclass:: SignedComparable
-    :show-inheritance:
-    :no-members:
-
 .. autoclass:: ComparableScalar
     :show-inheritance:
     :no-members:
@@ -67,8 +63,8 @@ class Scalar(Protocol):
     def __pos__(self) -> Self: ...
 
 
-class SignedComparable(SupportsAbs, Protocol):
-    """Protocol that ensures signed comparability."""
+class ComparableScalar(Scalar, SupportsAbs, Protocol):
+    """Protocol for comparable :class:`Scalar`, like a real number."""
 
     __slots__ = ()
 
@@ -89,9 +85,3 @@ class SignedComparable(SupportsAbs, Protocol):
 
     @abstractmethod
     def __pos__(self) -> Self: ...
-
-
-class ComparableScalar(SignedComparable, Scalar, Protocol):
-    """Intersection of :class:`SignedComparable` and :class:`Scalar`."""
-
-    __slots__ = ()
