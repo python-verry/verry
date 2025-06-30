@@ -206,7 +206,7 @@ class FormatSpec:
 
         return result
 
-    def __eq__(self, other: Self) -> bool:
+    def __eq__(self, other) -> bool:
         if type(other) is not type(self):
             return NotImplemented
 

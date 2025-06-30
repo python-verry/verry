@@ -3,10 +3,10 @@ from typing import Callable
 
 from verry.autodiff.autodiff import deriv
 from verry.interval.interval import Interval
-from verry.typing import SignedComparable
+from verry.typing import ComparableScalar
 
 
-def cumulative_trapezoid[T: SignedComparable](
+def cumulative_trapezoid[T: ComparableScalar](
     fun: Callable, a: Interval[T], b: Interval[T], n: int
 ) -> Interval[T]:
     """Cumulatively integrate `fun` using the composite trapezoidal rule.
@@ -56,7 +56,7 @@ def cumulative_trapezoid[T: SignedComparable](
     return approx + error
 
 
-def cumulative_simpson[T: SignedComparable](
+def cumulative_simpson[T: ComparableScalar](
     fun: Callable, a: Interval[T], b: Interval[T], n: int
 ) -> Interval[T]:
     """Cumulatively integrate `fun` using the composite Simpson's 1/3 rule.

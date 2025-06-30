@@ -16,11 +16,11 @@ def _decimal_exponent(x: decimal.Decimal | fractions.Fraction) -> int:
 
     result = 0
 
-    while abs(x) < 1:
+    while abs(x) < 1:  # type: ignore
         x *= 10
         result -= 1
 
-    while abs(x) >= 10:
+    while abs(x) >= 10:  # type: ignore
         x /= 10
         result += 1
 

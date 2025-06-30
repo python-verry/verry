@@ -134,8 +134,7 @@ class Dual[T: Scalar](Scalar):
             return self.__class__(self.real / rhs, self.imag / rhs)
 
         if rhs._level > self._level:
-            imag = -self * rhs.imag / rhs.real**2
-            return self.__class__(self / rhs.real, imag)  # type: ignore
+            return self.__class__(self / rhs.real, -self * rhs.imag / rhs.real**2)  # type: ignore
 
         imag = (self.imag * rhs.real - self.real * rhs.imag) / rhs.real**2
         return self.__class__(self.real / rhs.real, imag)
