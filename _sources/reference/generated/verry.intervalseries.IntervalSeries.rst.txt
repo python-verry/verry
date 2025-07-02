@@ -1,0 +1,11 @@
+﻿verry.intervalseries.IntervalSeries
+===================================
+
+.. currentmodule:: verry.intervalseries
+
+.. autoclass:: IntervalSeries
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

@@ -1,0 +1,11 @@
+﻿verry.interval.Operator
+=======================
+
+.. currentmodule:: verry.interval
+
+.. autoclass:: Operator
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

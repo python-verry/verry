@@ -1,0 +1,6 @@
+﻿verry.linalg.resolve\_intervalmatrix
+====================================
+
+.. currentmodule:: verry.linalg
+
+.. autofunction:: resolve_intervalmatrix
