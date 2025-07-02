@@ -1,11 +1,10 @@
 import dataclasses
-import inspect
 import itertools
 from collections.abc import Callable, Sequence
-from typing import Literal, TypeIs, no_type_check
+from typing import Literal, no_type_check
 
-from verry.integrate.integrator import Integrator, kashi
-from verry.integrate.tracker import Tracker, doubletontracker
+from verry.integrate.integrator import IntegratorFactory, kashi
+from verry.integrate.tracker import TrackerFactory, doubletontracker
 from verry.integrate.utility import seriessolution, variationaleq
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries
@@ -137,48 +136,43 @@ class C0Solver:
 
     Parameters
     ----------
-    integrator : Callable[[], type[Integrator]] | type[Integrator], optional
-        The default is :func:`kashi`.
-    tracker : type[Tracker], optional
-        The default is :func:`doubletontracker`.
+    integrator : IntegratorFactory | Callable[[], IntegratorFactory], optional
+        The default is :class:`kashi`.
+    tracker : TrackerFactory | Callable[[], TrackerFactory], optional
+        The default is :class:`doubletontracker`.
 
     Notes
     -----
     The choice of `tracker` has a significant impact on accuracy and computation time.
     Our recommendations are as follows:
 
-    1. Use :func:`doubletontracker` at first.
-    2. Use :func:`affinetracker` if the solver cannot compute solutions, or the accuracy
-       of solutions is not sufficient.
+    1. Use :class:`doubletontracker` at first.
+    2. Use :class:`affinetracker` if the solver cannot compute solutions, or the
+       accuracy of solutions is not sufficient.
     """
 
     __slots__ = ("_integrator", "_tracker")
-    _integrator: type[Integrator]
-    _tracker: type[Tracker]
+    _integrator: IntegratorFactory
+    _tracker: TrackerFactory
 
     def __init__(
         self,
-        integrator: Callable[[], type[Integrator]] | type[Integrator] | None = None,
-        tracker: Callable[[], type[Tracker]] | type[Tracker] | None = None,
+        integrator: IntegratorFactory | Callable[[], IntegratorFactory] | None = None,
+        tracker: TrackerFactory | Callable[[], TrackerFactory] | None = None,
     ):
         if integrator is None:
-            integrator = kashi()
-        elif not _is_integrator(integrator):
-            integrator = integrator()
+            self._integrator = kashi()
+        elif isinstance(integrator, IntegratorFactory):
+            self._integrator = integrator
+        else:
+            self._integrator = integrator()
 
         if tracker is None:
-            tracker = doubletontracker()
-        elif not _is_tracker(tracker):
-            tracker = tracker()
-
-        if not issubclass(integrator, Integrator):
-            raise TypeError
-
-        if not issubclass(tracker, Tracker):
-            raise TypeError
-
-        self._integrator = integrator
-        self._tracker = tracker
+            self._tracker = doubletontracker()
+        elif isinstance(tracker, TrackerFactory):
+            self._tracker = tracker
+        else:
+            self._tracker = tracker()
 
     def solve[T: ComparableScalar](
         self,
@@ -260,8 +254,8 @@ class C0Solver:
         ts = [t0.inf]
         series = []
 
-        tracker = self._tracker(y0)
-        itor = self._integrator(fun, t0, tracker.hull(), t_bound)
+        tracker = self._tracker.create(y0)
+        itor = self._integrator.create(fun, t0, tracker.hull(), t_bound)
 
         while itor.status == "RUNNING":
             if not (res := itor.step())[0]:
@@ -352,48 +346,43 @@ class C1Solver:
 
     Parameters
     ----------
-    integrator : Callable[[], type[Integrator]] | type[Integrator], optional
-        The default is :func:`kashi`.
-    tracker : type[Tracker], optional
-        The default is :func:`doubletontracker`.
+    integrator : IntegratorFactory | Callable[[], IntegratorFactory], optional
+        The default is :class:`kashi`.
+    tracker : TrackerFactory | Callable[[], TrackerFactory], optional
+        The default is :class:`doubletontracker`.
 
     Notes
     -----
     The choice of `tracker` has a significant impact on accuracy and computation time.
     Our recommendations are as follows:
 
-    1. Use :func:`doubletontracker` at first.
-    2. Use :func:`affinetracker` if the solver cannot compute solutions, or the
+    1. Use :class:`doubletontracker` at first.
+    2. Use :class:`affinetracker` if the solver cannot compute solutions, or the
        accuracy of solutions is not sufficient.
     """
 
     __slots__ = ("_integrator", "_tracker")
-    _integrator: type[Integrator]
-    _tracker: type[Tracker]
+    _integrator: IntegratorFactory
+    _tracker: TrackerFactory
 
     def __init__(
         self,
-        integrator: Callable[[], type[Integrator]] | type[Integrator] | None = None,
-        tracker: Callable[[], type[Tracker]] | type[Tracker] | None = None,
+        integrator: IntegratorFactory | Callable[[], IntegratorFactory] | None = None,
+        tracker: TrackerFactory | Callable[[], TrackerFactory] | None = None,
     ):
         if integrator is None:
-            integrator = kashi()
-        elif not _is_integrator(integrator):
-            integrator = integrator()
+            self._integrator = kashi()
+        elif isinstance(integrator, IntegratorFactory):
+            self._integrator = integrator
+        else:
+            self._integrator = integrator()
 
         if tracker is None:
-            tracker = doubletontracker()
-        elif not _is_tracker(tracker):
-            tracker = tracker()
-
-        if not issubclass(integrator, Integrator):
-            raise TypeError
-
-        if not issubclass(tracker, Tracker):
-            raise TypeError
-
-        self._integrator = integrator
-        self._tracker = tracker
+            self._tracker = doubletontracker()
+        elif isinstance(tracker, TrackerFactory):
+            self._tracker = tracker
+        else:
+            self._tracker = tracker()
 
     def solve[T: ComparableScalar](
         self,
@@ -476,9 +465,9 @@ class C1Solver:
         series = []
         totjac = intvlmat.eye(len(y0))
 
-        tracker = self._tracker(y0)
-        miditor = self._integrator(fun, t0, tracker.sample(), t_bound)
-        itor = self._integrator(fun, t0, tracker.hull(), t_bound)
+        tracker = self._tracker.create(y0)
+        miditor = self._integrator.create(fun, t0, tracker.sample(), t_bound)
+        itor = self._integrator.create(fun, t0, tracker.hull(), t_bound)
 
         while miditor.status == "RUNNING" and itor.status == "RUNNING":
             if not (res := miditor.step())[0]:
@@ -494,7 +483,7 @@ class C1Solver:
                 u1 = intvl(min(itor.t.sup, miditor.t.sup))
 
             varfun = variationaleq(fun, lambda t: tuple(x(t - u0) for x in itor.series))
-            varitors = [self._integrator(varfun, u0, x, u1) for x in eye]
+            varitors = [self._integrator.create(varfun, u0, x, u1) for x in eye]
 
             for x in varitors:
                 if not (res := x.step())[0]:
@@ -527,11 +516,3 @@ class C1Solver:
         sol = OdeSolution(ts, series)
         content = C1SolverResultContent(itor.t, itor.y, sol, totjac)
         return SolverResult("SUCCESS", content, "success")
-
-
-def _is_integrator(x: object) -> TypeIs[type[Integrator]]:
-    return inspect.isclass(x) and issubclass(x, Integrator)
-
-
-def _is_tracker(x: object) -> TypeIs[type[Tracker]]:
-    return inspect.isclass(x) and issubclass(x, Tracker)

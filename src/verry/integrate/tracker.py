@@ -1,7 +1,5 @@
-import inspect
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Any, TypeIs
 
 import numpy.typing as npt
 
@@ -15,17 +13,11 @@ class Tracker[T: IntervalMatrix](ABC):
     Each instance of :class:`Tracker` corresponds to a pair of a point and some closed
     convex set containing that point.
 
-    Parameters
-    ----------
-    x0 : IntervalMatrix, shape (n,)
-        Initial values.
+    This class is usually not instantiated directly, but is created by
+    :class:`TrackerFactory`.
     """
 
     __slots__ = ()
-
-    @abstractmethod
-    def __init__(self, x0: T):
-        raise NotImplementedError
 
     @abstractmethod
     def hull(self) -> T:
@@ -72,23 +64,44 @@ class Tracker[T: IntervalMatrix](ABC):
         raise NotImplementedError
 
 
-def affinetracker[T: IntervalMatrix = Any](
-    n: int | None = None, m: int = 0
-) -> type[Tracker[T]]:
-    """Tracker using affine arithmetic, usually producing the most accurate result."""
+class TrackerFactory[T: IntervalMatrix](ABC):
+    """Abstract factory for creating a tracker."""
 
-    class Result(_affinetracker[T]):
-        __slots__ = ()
+    __slots__ = ()
 
-        def __init__(self, x0):
-            super().__init__(x0)
-            self._n = n
-            self._m = m
+    @abstractmethod
+    def create(self, x0: T) -> Tracker[T]:
+        """Create :class:`Tracker`.
 
-    return Result
+        Parameters
+        ----------
+        x0 : IntervalMatrix, shape (n,)
+            Initial values.
+
+        Returns
+        -------
+        Tracker
+        """
+        raise NotImplementedError
 
 
-class _affinetracker[T: IntervalMatrix](Tracker[T], ABC):
+class affinetracker[T: IntervalMatrix](TrackerFactory[T]):
+    """Factory for creating a tracker using affine arithmetic, usually producing the
+    most accurate result."""
+
+    __slots__ = ("_n", "_m")
+    _n: int | None
+    _m: int
+
+    def __init__(self, n: int | None = None, m: int = 0):
+        self._n = n
+        self._m = m
+
+    def create(self, x0):
+        return _AffineTracker(x0, self._n, self._m)
+
+
+class _AffineTracker[T: IntervalMatrix](Tracker[T]):
     __slots__ = ("_context", "_current", "_matrix", "_n", "_m")
     _context: Context
     _current: list[AffineForm]
@@ -96,11 +109,12 @@ class _affinetracker[T: IntervalMatrix](Tracker[T], ABC):
     _n: int | None
     _m: int
 
-    @abstractmethod
-    def __init__(self, x0: T):
+    def __init__(self, x0: T, n: int | None, m: int):
         ctx = getcontext()
         self._context = ctx.copy()
         self._matrix = type(x0)
+        self._n = n
+        self._m = m
         setcontext(self._context)
 
         try:
@@ -115,15 +129,6 @@ class _affinetracker[T: IntervalMatrix](Tracker[T], ABC):
         return self._matrix([x.mid() for x in self._current])
 
     def update(self, a: T, b: T) -> None:
-        """Update the current pair.
-
-        Parameters
-        ----------
-        a : IntervalMatrix, shape (n, n)
-            The image of :meth:`hull` mapped by :math:`Df(x)`.
-        b : IntervalMatrix, shape (n,)
-            The value obtained by mapping :meth:`sample` with :math:`f(x)`.
-        """
         ctx = getcontext()
         setcontext(self._context)
 
@@ -148,9 +153,16 @@ class _affinetracker[T: IntervalMatrix](Tracker[T], ABC):
             setcontext(ctx)
 
 
-class directtracker[T: IntervalMatrix](Tracker[T]):
-    """The most obvious tracker."""
+class directtracker[T: IntervalMatrix](TrackerFactory[T]):
+    """Factory for creating the most obvious tracker."""
 
+    __slots__ = ()
+
+    def create(self, x0):
+        return _DirectTracker(x0)
+
+
+class _DirectTracker[T: IntervalMatrix](Tracker[T]):
     __slots__ = ("_current",)
     _current: T
 
@@ -164,21 +176,12 @@ class directtracker[T: IntervalMatrix](Tracker[T]):
         return self._current.__class__(self._current.mid())
 
     def update(self, a: T, b: T) -> None:
-        """Update the current pair.
-
-        Parameters
-        ----------
-        a : IntervalMatrix, shape (n, n)
-            The image of :meth:`hull` mapped by :math:`Df(x)`.
-        b : IntervalMatrix, shape (n,)
-            The value obtained by mapping :meth:`sample` with :math:`f(x)`.
-        """
         curr = self._current
         self._current = a @ (curr - curr.mid()) + b
 
 
-class qrtracker[T: IntervalMatrix](Tracker[T]):
-    """Tracker using a QR decomposition.
+class qrtracker[T: IntervalMatrix](TrackerFactory[T]):
+    """Factory for creating a tracker using a QR decomposition.
 
     This is an implementation of Evaluation 3 in [#Lo87]_, known as a Lohner's QR
     method.
@@ -190,6 +193,11 @@ class qrtracker[T: IntervalMatrix](Tracker[T]):
         Ullrich, Eds. Stuttgart, Germany: B. G. Teubner, 1987, pp. 225--286.
     """
 
+    def create(self, x0):
+        return _QRTracker(x0)
+
+
+class _QRTracker[T: IntervalMatrix](Tracker[T]):
     __slots__ = ("_b", "_m", "_r")
     _b: T
     _m: npt.NDArray
@@ -207,15 +215,6 @@ class qrtracker[T: IntervalMatrix](Tracker[T]):
         return self._b.__class__(self._m)
 
     def update(self, a: T, b: T) -> None:
-        """Update the current pair.
-
-        Parameters
-        ----------
-        a : IntervalMatrix, shape (n, n)
-            The image of :meth:`hull` mapped by :math:`Df(x)`.
-        b : IntervalMatrix, shape (n,)
-            The value obtained by mapping :meth:`sample` with :math:`f(x)`.
-        """
         q0 = self._b
         tmp = a @ q0
 
@@ -233,22 +232,16 @@ class qrtracker[T: IntervalMatrix](Tracker[T]):
         self._r = (p1 @ a @ q0) @ self._r + p1 @ (b - self._m)
 
 
-def doubletontracker(
-    tracker: Callable[[], type[Tracker]] | type[Tracker] | None = None,
-) -> type[Tracker]:
-    """Tracker suitable for large initial intervals.
+class doubletontracker[T: IntervalMatrix](TrackerFactory[T]):
+    """Factory for creating a tracker suitable for large initial intervals.
 
     This is an implementation of Evaluation 4 in [#Lo87]_, and the name "doubleton" is
     from [#MrZg00]_.
 
     Parameters
     ----------
-    tracker : type[Tracker], optional
+    tracker : TrackerFactory | Callable[[], TrackerFactory], optional
         The default is :class:`qrtracker`.
-
-    Returns
-    -------
-    type[Tracker]
 
     References
     ----------
@@ -260,39 +253,35 @@ def doubletontracker(
         :doi:`10.4064/ap-74-1-237-259`.
     """
 
-    def is_tracker(x: object) -> TypeIs[type[Tracker]]:
-        return inspect.isclass(x) and issubclass(x, Tracker)
+    __slots__ = ("_factory",)
+    _factory: TrackerFactory[T]
 
-    if tracker is None:
-        tracker = qrtracker
-    elif not is_tracker(tracker):
-        tracker = tracker()
+    def __init__(
+        self, tracker: TrackerFactory[T] | Callable[[], TrackerFactory[T]] | None = None
+    ):
+        if tracker is None:
+            self._factory = qrtracker()
+        elif isinstance(tracker, TrackerFactory):
+            self._factory = tracker
+        else:
+            self._factory = tracker()
 
-    if not issubclass(tracker, Tracker):
-        raise TypeError
-
-    class Result(_doubletontracker):
-        __slots__ = ()
-
-        def __init__(self, x0):
-            super().__init__(x0)
-            self._tracker = tracker(x0.zeros_like())
-
-    return Result
+    def create(self, x0):
+        return _DoubletonTracker(x0, self._factory)
 
 
-class _doubletontracker[T: IntervalMatrix](Tracker[T], ABC):
+class _DoubletonTracker[T: IntervalMatrix](Tracker[T]):
     __slots__ = ("_c", "_m", "_r0", "_tracker")
     _c: T
     _m: npt.NDArray
     _r0: T
     _tracker: Tracker[T]
 
-    @abstractmethod
-    def __init__(self, x0: T):
+    def __init__(self, x0: T, factory: TrackerFactory[T]):
         self._c = x0.eye(len(x0))
         self._m = x0.mid()
         self._r0 = x0 - self._m
+        self._tracker = factory.create(x0.zeros_like())
 
     def hull(self) -> T:
         return self._m + self._tracker.hull() + self._c @ self._r0
@@ -301,15 +290,6 @@ class _doubletontracker[T: IntervalMatrix](Tracker[T], ABC):
         return self._c.__class__(self._m)
 
     def update(self, a: T, b: T) -> None:
-        """Update the current pair.
-
-        Parameters
-        ----------
-        a : IntervalMatrix, shape (n, n)
-            The image of :meth:`hull` mapped by :math:`Df(x)`.
-        b : IntervalMatrix, shape (n,)
-            The value obtained by mapping :meth:`sample` with :math:`f(x)`.
-        """
         c0 = self._c
         c1 = a.mid() @ c0.inf
         self._c = c0.__class__(c1)

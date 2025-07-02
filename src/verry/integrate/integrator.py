@@ -13,16 +13,8 @@ from verry.typing import ComparableScalar
 class Integrator[T: ComparableScalar](ABC):
     r"""Abstract base class for ODE integrators.
 
-    Parameters
-    ----------
-    fun : Callable
-        Right-hand side of the system. The calling signature is ``fun(t, *y)``.
-    t0 : Interval
-        Initial time.
-    y0 : IntervalMatrix | Sequence[Interval]
-        Initial state.
-    t_bound : Interval
-        Boundary time. Its infimum must be greater than the supremum of `t0`.
+    This class is usually not instantiated directly, but is created by
+    :class:`IntegratorFactory`.
 
     Attributes
     ----------
@@ -84,16 +76,6 @@ class Integrator[T: ComparableScalar](ABC):
     y: tuple[Interval[T], ...]
 
     @abstractmethod
-    def __init__(
-        self,
-        fun: Callable,
-        t0: Interval[T],
-        y0: IntervalMatrix[T] | Sequence[Interval[T]],
-        t_bound: Interval[T],
-    ):
-        raise NotImplementedError
-
-    @abstractmethod
     def step(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         """Perform one integration step.
 
@@ -128,15 +110,39 @@ class Integrator[T: ComparableScalar](ABC):
         raise NotImplementedError
 
 
-def eilo[T: ComparableScalar](
-    order: int = 15,
-    rtol: T | float | int = 1e-10,
-    atol: T | float | int = 1e-10,
-    max_tries: int = 5,
-    min_step: T | None = None,
-    max_step: T | None = None,
-) -> type[Integrator[T]]:
-    r"""Integrator based on Eijgenraam and Lohner's algorithm.
+class IntegratorFactory[T: ComparableScalar](ABC):
+    """Abstract factory for creating an integrator."""
+
+    @abstractmethod
+    def create(
+        self,
+        fun: Callable,
+        t0: Interval[T],
+        y0: IntervalMatrix[T] | Sequence[Interval[T]],
+        t_bound: Interval[T],
+    ) -> Integrator[T]:
+        """Create :class:`Integrator`.
+
+        Parameters
+        ----------
+        fun : Callable
+            Right-hand side of the system. The calling signature is ``fun(t, *y)``.
+        t0 : Interval
+            Initial time.
+        y0 : IntervalMatrix | Sequence[Interval]
+            Initial state.
+        t_bound : Interval
+            Boundary time. Its infimum must be greater than the supremum of `t0`.
+
+        Returns
+        -------
+        Integrator
+        """
+        raise NotImplementedError
+
+
+class eilo[T: ComparableScalar](IntegratorFactory[T]):
+    r"""Factory for creating an integrator based on Eijgenraam and Lohner's algorithm.
 
     See their publications [#Ei81]_\ [#Lo87]_\ [#Lo92]_ for more details on the theory.
 
@@ -157,10 +163,6 @@ def eilo[T: ComparableScalar](
         Allowed maximum step size. If adaptive stepping produced a step size that
         is greater than `max_step`, step size is set to `max_step`.
 
-    Returns
-    -------
-    type[Integrator]
-
     References
     ----------
     .. [#Ei81] P. Eijgenraam, *The solution of initial value problems using interval
@@ -175,83 +177,51 @@ def eilo[T: ComparableScalar](
         Press, 1992, pp. 425--435.
     """
 
-    if order < 3:
-        raise ValueError
+    _order: int
+    _rtol: T
+    _atol: T | float | int
+    _max_tries: int
+    _min_step: T | None
+    _max_step: T | None
 
-    if max_tries < 1:
-        raise ValueError
+    def __init__(
+        self,
+        order: int = 15,
+        rtol: T | float | int = 1e-10,
+        atol: T | float | int = 1e-10,
+        max_tries: int = 5,
+        min_step: T | None = None,
+        max_step: T | None = None,
+    ):
+        if order < 3:
+            raise ValueError
 
-    class Result(_eilo[T]):
-        def __init__(
-            self,
-            fun: Callable,
-            t0: Interval[T],
-            y0: IntervalMatrix[T] | Sequence[Interval[T]],
-            t_bound: Interval[T],
-        ):
-            if not isinstance(t0, Interval):
-                raise TypeError
+        if max_tries < 1:
+            raise ValueError
 
-            if t0.sup >= t_bound.inf:
-                raise ValueError
+        self._order = order
+        self._rtol = rtol
+        self._atol = atol
+        self._max_tries = max_tries
+        self._min_step = min_step
+        self._max_step = max_step
 
-            self.status = "RUNNING"
-            self.t = t0
-            self.y = tuple(y0)
-            self.t_bound = t_bound
-            self.t_prev = None
-            self.series = None
-            self.order = order
-            self._fun = fun
-            self._max_tries = max_tries
-
-            match rtol:
-                case t0.endtype():
-                    self._rtol = rtol
-
-                case float() | int():
-                    self._rtol = t0.converter.fromfloat(float(rtol), strict=False)
-
-                case _:
-                    raise TypeError
-
-            match atol:
-                case t0.endtype():
-                    self._atol = atol
-
-                case float() | int():
-                    self._atol = t0.converter.fromfloat(float(atol), strict=False)
-
-                case _:
-                    raise TypeError
-
-            match min_step:
-                case t0.endtype():
-                    self._min_step = min_step
-
-                case None:
-                    self._min_step = t0.operator.ZERO
-
-                case _:
-                    raise TypeError
-
-            match max_step:
-                case t0.endtype():
-                    self._max_step = max_step
-
-                case None:
-                    self._max_step = t0.operator.INFINITY
-
-                case _:
-                    raise TypeError
-
-            if not t0.operator.ZERO <= self._min_step <= self._max_step:
-                raise ValueError
-
-    return Result
+    def create(self, fun, t0, y0, t_bound):
+        return _EiLo(
+            fun,
+            t0,
+            y0,
+            t_bound,
+            self._order,
+            self._rtol,
+            self._atol,
+            self._max_tries,
+            self._min_step,
+            self._max_step,
+        )
 
 
-class _eilo[T: ComparableScalar](Integrator[T], ABC):
+class _EiLo[T: ComparableScalar](Integrator[T]):
     status: Literal["FAILURE", "RUNNING", "SUCCESS"]
     t: Interval[T]
     y: tuple[Interval[T], ...]
@@ -265,6 +235,78 @@ class _eilo[T: ComparableScalar](Integrator[T], ABC):
     _min_step: T
     _max_step: T
     _max_tries: int
+
+    def __init__(
+        self,
+        fun: Callable,
+        t0: Interval[T],
+        y0: IntervalMatrix[T] | Sequence[Interval[T]],
+        t_bound: Interval[T],
+        order: int,
+        rtol: T | float | int,
+        atol: T | float | int,
+        max_tries: int,
+        min_step: T | None,
+        max_step: T | None,
+    ):
+        if not isinstance(t0, Interval):
+            raise TypeError
+
+        if t0.sup >= t_bound.inf:
+            raise ValueError
+
+        self.status = "RUNNING"
+        self.t = t0
+        self.y = tuple(y0)
+        self.t_bound = t_bound
+        self.t_prev = None
+        self.series = None
+        self.order = order
+        self._fun = fun
+        self._max_tries = max_tries
+
+        match rtol:
+            case t0.endtype():
+                self._rtol = rtol
+
+            case float() | int():
+                self._rtol = t0.converter.fromfloat(float(rtol), strict=False)
+
+            case _:
+                raise TypeError
+
+        match atol:
+            case t0.endtype():
+                self._atol = atol
+
+            case float() | int():
+                self._atol = t0.converter.fromfloat(float(atol), strict=False)
+
+            case _:
+                raise TypeError
+
+        match min_step:
+            case t0.endtype():
+                self._min_step = min_step
+
+            case None:
+                self._min_step = t0.operator.ZERO
+
+            case _:
+                raise TypeError
+
+        match max_step:
+            case t0.endtype():
+                self._max_step = max_step
+
+            case None:
+                self._max_step = t0.operator.INFINITY
+
+            case _:
+                raise TypeError
+
+        if not t0.operator.ZERO <= self._min_step <= self._max_step:
+            raise ValueError
 
     def step(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         ZERO = self.t.operator.ZERO
@@ -358,15 +400,8 @@ class _eilo[T: ComparableScalar](Integrator[T], ABC):
         self.y = tuple(x.copy() for x in y)
 
 
-def kashi[T: ComparableScalar](
-    order: int = 15,
-    rtol: T | float | int = 1e-10,
-    atol: T | float | int = 1e-10,
-    max_tries: int = 5,
-    min_step: T | None = None,
-    max_step: T | None = None,
-) -> type[Integrator[T]]:
-    r"""Integrator based on Kashiwagi's algorithm.
+class kashi[T: ComparableScalar](IntegratorFactory[T]):
+    r"""Factory for creating an integrator based on Kashiwagi's algorithm.
 
     This is an implementation of [#Ka95]_.
 
@@ -387,10 +422,6 @@ def kashi[T: ComparableScalar](
         Allowed maximum step size. If adaptive stepping produced a step size that
         is greater than `max_step`, step size is set to `max_step`.
 
-    Returns
-    -------
-    type[Integrator]
-
     References
     ----------
     .. [#Ka95] M. Kashiwagi, "Power series arithmetic and its application to numerical
@@ -398,83 +429,51 @@ def kashi[T: ComparableScalar](
         (NOLTA '95)*, Las Vegas, NV, USA, Dec. 10--14, 1995, pp. 251--254.
     """
 
-    if order < 3:
-        raise ValueError
+    _order: int
+    _rtol: T
+    _atol: T | float | int
+    _max_tries: int
+    _min_step: T | None
+    _max_step: T | None
 
-    if max_tries < 1:
-        raise ValueError
+    def __init__(
+        self,
+        order: int = 15,
+        rtol: T | float | int = 1e-10,
+        atol: T | float | int = 1e-10,
+        max_tries: int = 5,
+        min_step: T | None = None,
+        max_step: T | None = None,
+    ):
+        if order < 3:
+            raise ValueError
 
-    class Result(_kashi[T]):
-        def __init__(
-            self,
-            fun: Callable,
-            t0: Interval[T],
-            y0: IntervalMatrix[T] | Sequence[Interval[T]],
-            t_bound: Interval[T],
-        ):
-            if not isinstance(t0, Interval):
-                raise TypeError
+        if max_tries < 1:
+            raise ValueError
 
-            if t0.sup >= t_bound.inf:
-                raise ValueError
+        self._order = order
+        self._rtol = rtol
+        self._atol = atol
+        self._max_tries = max_tries
+        self._min_step = min_step
+        self._max_step = max_step
 
-            self.status = "RUNNING"
-            self.t = t0
-            self.y = tuple(y0)
-            self.t_bound = t_bound
-            self.t_prev = None
-            self.series = None
-            self.order = order
-            self._fun = fun
-            self._max_tries = max_tries
-
-            match rtol:
-                case t0.endtype():
-                    self._rtol = rtol
-
-                case float() | int():
-                    self._rtol = t0.converter.fromfloat(float(rtol), strict=False)
-
-                case _:
-                    raise TypeError
-
-            match atol:
-                case t0.endtype():
-                    self._atol = atol
-
-                case float() | int():
-                    self._atol = t0.converter.fromfloat(float(atol), strict=False)
-
-                case _:
-                    raise TypeError
-
-            match min_step:
-                case t0.endtype():
-                    self._min_step = min_step
-
-                case None:
-                    self._min_step = t0.operator.ZERO
-
-                case _:
-                    raise TypeError
-
-            match max_step:
-                case t0.endtype():
-                    self._max_step = max_step
-
-                case None:
-                    self._max_step = t0.operator.INFINITY
-
-                case _:
-                    raise TypeError
-
-            if not t0.operator.ZERO <= self._min_step <= self._max_step:
-                raise ValueError
-
-    return Result
+    def create(self, fun, t0, y0, t_bound):
+        return _Kashi(
+            fun,
+            t0,
+            y0,
+            t_bound,
+            self._order,
+            self._rtol,
+            self._atol,
+            self._max_tries,
+            self._min_step,
+            self._max_step,
+        )
 
 
-class _kashi[T: ComparableScalar](Integrator[T], ABC):
+class _Kashi[T: ComparableScalar](Integrator[T], ABC):
     status: Literal["FAILURE", "RUNNING", "SUCCESS"]
     t: Interval[T]
     y: tuple[Interval[T], ...]
@@ -488,6 +487,78 @@ class _kashi[T: ComparableScalar](Integrator[T], ABC):
     _min_step: T
     _max_step: T
     _max_tries: int
+
+    def __init__(
+        self,
+        fun: Callable,
+        t0: Interval[T],
+        y0: IntervalMatrix[T] | Sequence[Interval[T]],
+        t_bound: Interval[T],
+        order: int,
+        rtol: T | float | int,
+        atol: T | float | int,
+        max_tries: int,
+        min_step: T | None,
+        max_step: T | None,
+    ):
+        if not isinstance(t0, Interval):
+            raise TypeError
+
+        if t0.sup >= t_bound.inf:
+            raise ValueError
+
+        self.status = "RUNNING"
+        self.t = t0
+        self.y = tuple(y0)
+        self.t_bound = t_bound
+        self.t_prev = None
+        self.series = None
+        self.order = order
+        self._fun = fun
+        self._max_tries = max_tries
+
+        match rtol:
+            case t0.endtype():
+                self._rtol = rtol
+
+            case float() | int():
+                self._rtol = t0.converter.fromfloat(float(rtol), strict=False)
+
+            case _:
+                raise TypeError
+
+        match atol:
+            case t0.endtype():
+                self._atol = atol
+
+            case float() | int():
+                self._atol = t0.converter.fromfloat(float(atol), strict=False)
+
+            case _:
+                raise TypeError
+
+        match min_step:
+            case t0.endtype():
+                self._min_step = min_step
+
+            case None:
+                self._min_step = t0.operator.ZERO
+
+            case _:
+                raise TypeError
+
+        match max_step:
+            case t0.endtype():
+                self._max_step = max_step
+
+            case None:
+                self._max_step = t0.operator.INFINITY
+
+            case _:
+                raise TypeError
+
+        if not t0.operator.ZERO <= self._min_step <= self._max_step:
+            raise ValueError
 
     def step(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         ZERO = self.t.operator.ZERO
