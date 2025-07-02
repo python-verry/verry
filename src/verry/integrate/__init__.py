@@ -36,6 +36,7 @@ Integrators
     :toctree: generated/
 
     Integrator
+    IntegratorFactory
     eilo
     kashi
 
@@ -46,6 +47,7 @@ Trackers
     :toctree: generated/
 
     Tracker
+    TrackerFactory
     affinetracker
     directtracker
     doubletontracker
@@ -69,7 +71,7 @@ Miscellaneous
 
 """
 
-from .integrator import Integrator, eilo, kashi
+from .integrator import Integrator, IntegratorFactory, eilo, kashi
 from .quad import cumulative_simpson, cumulative_trapezoid
 from .solver import (
     AbortSolving,
@@ -82,11 +84,19 @@ from .solver import (
     OdeSolution,
     SolverResult,
 )
-from .tracker import Tracker, affinetracker, directtracker, doubletontracker, qrtracker
+from .tracker import (
+    Tracker,
+    TrackerFactory,
+    affinetracker,
+    directtracker,
+    doubletontracker,
+    qrtracker,
+)
 from .utility import seriessolution, variationaleq
 
 __all__ = [
     "Integrator",
+    "IntegratorFactory",
     "eilo",
     "kashi",
     "cumulative_simpson",
@@ -101,6 +111,7 @@ __all__ = [
     "OdeSolution",
     "SolverResult",
     "Tracker",
+    "TrackerFactory",
     "affinetracker",
     "directtracker",
     "doubletontracker",
