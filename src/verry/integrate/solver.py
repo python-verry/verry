@@ -3,11 +3,13 @@ import itertools
 from collections.abc import Callable, Sequence
 from typing import Literal, no_type_check
 
+from verry import function as vrf
+from verry.autodiff.autodiff import jacobian
 from verry.integrate.integrator import IntegratorFactory, kashi
 from verry.integrate.tracker import TrackerFactory, doubletontracker
 from verry.integrate.utility import seriessolution, variationaleq
 from verry.interval.interval import Interval
-from verry.intervalseries import IntervalSeries
+from verry.intervalseries import IntervalSeries, localcontext
 from verry.linalg.intervalmatrix import IntervalMatrix, resolve_intervalmatrix
 from verry.typing import ComparableScalar
 
@@ -131,7 +133,7 @@ class C0SolverCallbackArg[T: ComparableScalar]:
     series: tuple[IntervalSeries[T], ...]
 
 
-class C0Solver:
+class C0Solver[T1: IntegratorFactory, T2: TrackerFactory]:
     """ODE solver.
 
     Parameters
@@ -151,28 +153,28 @@ class C0Solver:
        accuracy of solutions is not sufficient.
     """
 
-    __slots__ = ("_integrator", "_tracker")
-    _integrator: IntegratorFactory
-    _tracker: TrackerFactory
+    __slots__ = ("integrator", "tracker")
+    integrator: T1
+    tracker: T2
 
     def __init__(
         self,
-        integrator: IntegratorFactory | Callable[[], IntegratorFactory] | None = None,
-        tracker: TrackerFactory | Callable[[], TrackerFactory] | None = None,
+        integrator: T1 | Callable[[], T1] | None = None,
+        tracker: T2 | Callable[[], T2] | None = None,
     ):
         if integrator is None:
-            self._integrator = kashi()
+            self.integrator = kashi()
         elif isinstance(integrator, IntegratorFactory):
-            self._integrator = integrator
+            self.integrator = integrator
         else:
-            self._integrator = integrator()
+            self.integrator = integrator()
 
         if tracker is None:
-            self._tracker = doubletontracker()
+            self.tracker = doubletontracker()
         elif isinstance(tracker, TrackerFactory):
-            self._tracker = tracker
+            self.tracker = tracker
         else:
-            self._tracker = tracker()
+            self.tracker = tracker()
 
     def solve[T: ComparableScalar](
         self,
@@ -254,8 +256,8 @@ class C0Solver:
         ts = [t0.inf]
         series = []
 
-        tracker = self._tracker.create(y0)
-        itor = self._integrator.create(fun, t0, tracker.hull(), t_bound)
+        tracker = self.tracker.create(y0)
+        itor = self.integrator.create(fun, t0, tracker.hull(), t_bound)
 
         while itor.status == "RUNNING":
             if not (res := itor.step())[0]:
@@ -277,7 +279,7 @@ class C0Solver:
             tracker.update(jac, a1)
             itor.update(u1, y1 := tracker.hull())
 
-            ts.append(u1.sup)
+            ts.append(u1.inf)
             series.append(itor.series)
 
             if callback is not None:
@@ -341,7 +343,7 @@ class C1SolverCallbackArg[T: ComparableScalar]:
     totjac: IntervalMatrix[T]
 
 
-class C1Solver:
+class C1Solver[T1: IntegratorFactory, T2: TrackerFactory]:
     """ODE solver using variational equations.
 
     Parameters
@@ -361,28 +363,35 @@ class C1Solver:
        accuracy of solutions is not sufficient.
     """
 
-    __slots__ = ("_integrator", "_tracker")
-    _integrator: IntegratorFactory
-    _tracker: TrackerFactory
+    __slots__ = ("integrator", "tracker", "_mode", "_order")
+    integrator: T1
+    tracker: T2
+    _mode: Literal["naive", "lognorm"]
+    _order: int | None
 
     def __init__(
         self,
-        integrator: IntegratorFactory | Callable[[], IntegratorFactory] | None = None,
-        tracker: TrackerFactory | Callable[[], TrackerFactory] | None = None,
+        integrator: T1 | Callable[[], T1] | None = None,
+        tracker: T2 | Callable[[], T2] | None = None,
+        mode: Literal["naive", "lognorm"] = "naive",
+        order: int | None = None,
     ):
         if integrator is None:
-            self._integrator = kashi()
+            self.integrator = kashi()
         elif isinstance(integrator, IntegratorFactory):
-            self._integrator = integrator
+            self.integrator = integrator
         else:
-            self._integrator = integrator()
+            self.integrator = integrator()
 
         if tracker is None:
-            self._tracker = doubletontracker()
+            self.tracker = doubletontracker()
         elif isinstance(tracker, TrackerFactory):
-            self._tracker = tracker
+            self.tracker = tracker
         else:
-            self._tracker = tracker()
+            self.tracker = tracker()
+
+        self._mode = mode
+        self._order = order
 
     def solve[T: ComparableScalar](
         self,
@@ -460,14 +469,68 @@ class C1Solver:
 
         intvl = type(t0)
         intvlmat = type(y0)
+        ts = [t0.inf]
+        series = []
+        totjac = intvlmat.eye(len(y0))
+
+        tracker = self.tracker.create(y0)
+        miditor = self.integrator.create(fun, t0, tracker.sample(), t_bound)
+        itor = self.integrator.create(fun, t0, tracker.hull(), t_bound)
+
+        while miditor.status == "RUNNING" and itor.status == "RUNNING":
+            if not (res := miditor.step())[0]:
+                return SolverResult("FAILURE", None, res[1])
+
+            if not (res := itor.step())[0]:
+                return SolverResult("FAILURE", None, res[1])
+
+            u0 = itor.t_prev
+            u1 = t_bound
+
+            if miditor.status == "RUNNING" or itor.status == "RUNNING":
+                u1 = intvl(min(itor.t.sup, miditor.t.sup))
+
+            a1 = intvlmat([x.eval(u1 - u0) for x in miditor.series])
+            jac = _apply_c1lohner(itor.series, fun, u0, u1, intvlmat)
+
+            tracker.update(jac, a1)
+            miditor.update(u1, tracker.sample())
+            itor.update(u1, y1 := tracker.hull())
+
+            ts.append(u1.inf)
+            series.append(itor.series)
+            totjac = jac @ totjac
+
+            if callback is not None:
+                try:
+                    callback(C1SolverCallbackArg(u1, y1, u0, itor.series, jac, totjac))
+                except AbortSolving as exc:
+                    return SolverResult("ABORTED", None, exc.message)
+
+        sol = OdeSolution(ts, series)
+        content = C1SolverResultContent(itor.t, itor.y, sol, totjac)
+        return SolverResult("SUCCESS", content, "success")
+
+
+"""
+    @no_type_check
+    def __solve(self, fun, t0, y0, t_bound, callback):
+        if not isinstance(t0, Interval):
+            raise TypeError
+
+        if not isinstance(y0, IntervalMatrix):
+            y0 = resolve_intervalmatrix(type(t0))(y0)
+
+        intvl = type(t0)
+        intvlmat = type(y0)
         eye = intvlmat.eye(len(y0))
         ts = [t0.inf]
         series = []
         totjac = intvlmat.eye(len(y0))
 
-        tracker = self._tracker.create(y0)
-        miditor = self._integrator.create(fun, t0, tracker.sample(), t_bound)
-        itor = self._integrator.create(fun, t0, tracker.hull(), t_bound)
+        tracker = self.tracker.create(y0)
+        miditor = self.integrator.create(fun, t0, tracker.sample(), t_bound)
+        itor = self.integrator.create(fun, t0, tracker.hull(), t_bound)
 
         while miditor.status == "RUNNING" and itor.status == "RUNNING":
             if not (res := miditor.step())[0]:
@@ -483,7 +546,7 @@ class C1Solver:
                 u1 = intvl(min(itor.t.sup, miditor.t.sup))
 
             varfun = variationaleq(fun, lambda t: tuple(x(t - u0) for x in itor.series))
-            varitors = [self._integrator.create(varfun, u0, x, u1) for x in eye]
+            varitors = [self.integrator.create(varfun, u0, x, u1) for x in eye]
 
             for x in varitors:
                 if not (res := x.step())[0]:
@@ -503,7 +566,7 @@ class C1Solver:
             miditor.update(u1, tracker.sample())
             itor.update(u1, y1 := tracker.hull())
 
-            ts.append(u1.sup)
+            ts.append(u1.inf)
             series.append(itor.series)
             totjac = jac @ totjac
 
@@ -516,3 +579,64 @@ class C1Solver:
         sol = OdeSolution(ts, series)
         content = C1SolverResultContent(itor.t, itor.y, sol, totjac)
         return SolverResult("SUCCESS", content, "success")
+"""
+
+
+def _apply_c1lohner[T: ComparableScalar](
+    series: Sequence[IntervalSeries[T]],
+    fun: Callable,
+    t0: Interval[T],
+    t1: Interval[T],
+    intvlmat: type[IntervalMatrix[T]],
+) -> IntervalMatrix[T]:
+    def dfun(t, *y):
+        return jacobian(lambda *y: fun(t, *y))(*y)
+
+    intvl = type(t0)
+    domain = intvl(0, (t1 - t0).sup)
+    deg = len(series[0].coeffs) - 1
+    n = len(series)
+
+    with localcontext(rounding="TYPE2", deg=deg, domain=domain):
+        t = IntervalSeries([t0, 1], intvl=intvl)
+        tmp = dfun(t, *series)
+
+        v = [[tmp[i][j].eval(domain) for j in range(n)] for i in range(n)]
+
+    mu = v[0][0] + sum(abs(v[0][j]) for j in range(1, n))
+    mu = intvl(mu.sup)
+
+    for i in range(1, n):
+        tmp = v[i][i] + sum(abs(v[i][j]) for j in range(n) if j != i)
+
+        if tmp.sup > mu.sup:
+            mu = intvl(tmp.sup)
+
+    u0 = intvlmat.empty((n, n))
+    varfun = variationaleq(fun, lambda t: tuple(x(t - t0) for x in series))
+
+    for i in range(n):
+        for j in range(n):
+            u0[i, j] = vrf.exp(mu * domain) * intvl(-1, 1)
+
+    for i in range(n):
+        tmp = varfun(t0 + domain, *u0[i])
+
+        for j in range(n):
+            u0[i, j] &= (1 if j == i else 0) + domain * tmp[j]
+
+    varfun = variationaleq(fun, lambda t: tuple(x(t - t0) for x in series))
+    res = intvlmat.empty((n, n))
+
+    for i in range(n):
+        v0 = tuple(intvl(1 if j == i else 0) for j in range(n))
+        tmp0 = seriessolution(varfun, t0, v0, deg + 20 - 1)
+        tmp1 = seriessolution(varfun, t0, u0[i], deg + 20)
+
+        for j in range(n):
+            tmp0[j].coeffs.append(tmp1[j].coeffs[-1])
+
+        for j in range(n):
+            res[i, j] = tmp0[j].eval(t1 - t0)
+
+    return res

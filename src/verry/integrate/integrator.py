@@ -141,7 +141,12 @@ class IntegratorFactory[T: ComparableScalar](ABC):
         raise NotImplementedError
 
 
-class eilo[T: ComparableScalar](IntegratorFactory[T]):
+class AdaptiveStepIntegratorFactory[T: ComparableScalar](IntegratorFactory[T]):
+    min_step: T | None
+    max_step: T | None
+
+
+class eilo[T: ComparableScalar](AdaptiveStepIntegratorFactory[T]):
     r"""Factory for creating an integrator based on Eijgenraam and Lohner's algorithm.
 
     See their publications [#Ei81]_\ [#Lo87]_\ [#Lo92]_ for more details on the theory.
@@ -177,12 +182,12 @@ class eilo[T: ComparableScalar](IntegratorFactory[T]):
         Press, 1992, pp. 425--435.
     """
 
+    min_step: T | None
+    max_step: T | None
     _order: int
-    _rtol: T
+    _rtol: T | float | int
     _atol: T | float | int
     _max_tries: int
-    _min_step: T | None
-    _max_step: T | None
 
     def __init__(
         self,
@@ -203,8 +208,8 @@ class eilo[T: ComparableScalar](IntegratorFactory[T]):
         self._rtol = rtol
         self._atol = atol
         self._max_tries = max_tries
-        self._min_step = min_step
-        self._max_step = max_step
+        self.min_step = min_step
+        self.max_step = max_step
 
     def create(self, fun, t0, y0, t_bound):
         return _EiLo(
@@ -216,8 +221,8 @@ class eilo[T: ComparableScalar](IntegratorFactory[T]):
             self._rtol,
             self._atol,
             self._max_tries,
-            self._min_step,
-            self._max_step,
+            self.min_step,
+            self.max_step,
         )
 
 
@@ -400,7 +405,7 @@ class _EiLo[T: ComparableScalar](Integrator[T]):
         self.y = tuple(x.copy() for x in y)
 
 
-class kashi[T: ComparableScalar](IntegratorFactory[T]):
+class kashi[T: ComparableScalar](AdaptiveStepIntegratorFactory[T]):
     r"""Factory for creating an integrator based on Kashiwagi's algorithm.
 
     This is an implementation of [#Ka95]_.
@@ -429,12 +434,12 @@ class kashi[T: ComparableScalar](IntegratorFactory[T]):
         (NOLTA '95)*, Las Vegas, NV, USA, Dec. 10--14, 1995, pp. 251--254.
     """
 
+    min_step: T | None
+    max_step: T | None
     _order: int
-    _rtol: T
+    _rtol: T | float | int
     _atol: T | float | int
     _max_tries: int
-    _min_step: T | None
-    _max_step: T | None
 
     def __init__(
         self,
@@ -455,8 +460,8 @@ class kashi[T: ComparableScalar](IntegratorFactory[T]):
         self._rtol = rtol
         self._atol = atol
         self._max_tries = max_tries
-        self._min_step = min_step
-        self._max_step = max_step
+        self.min_step = min_step
+        self.max_step = max_step
 
     def create(self, fun, t0, y0, t_bound):
         return _Kashi(
@@ -468,8 +473,8 @@ class kashi[T: ComparableScalar](IntegratorFactory[T]):
             self._rtol,
             self._atol,
             self._max_tries,
-            self._min_step,
-            self._max_step,
+            self.min_step,
+            self.max_step,
         )
 
 
