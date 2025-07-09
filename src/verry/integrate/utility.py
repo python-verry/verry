@@ -7,7 +7,7 @@ from verry.linalg.intervalmatrix import IntervalMatrix
 from verry.typing import ComparableScalar
 
 
-def seriessolution[T: ComparableScalar](
+def seriessol[T: ComparableScalar](
     fun: Callable,
     t0: Interval[T],
     y0: IntervalMatrix[T] | Sequence[Interval[T]],

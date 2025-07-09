@@ -3,7 +3,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, Literal
 
 from verry import function as vrf
-from verry.integrate.utility import seriessolution
+from verry.integrate.utility import seriessol
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries, localcontext
 from verry.linalg.intervalmatrix import IntervalMatrix
@@ -319,7 +319,7 @@ class _EiLo[T: ComparableScalar](Integrator[T]):
         cadd = self.t.operator.cadd
         csub = self.t.operator.csub
 
-        p0 = seriessolution(self._fun, self.t, self.y, self.order)
+        p0 = seriessol(self._fun, self.t, self.y, self.order)
         tmp = ZERO
 
         for i in (self.order, self.order - 1, self.order - 2):
@@ -381,7 +381,7 @@ class _EiLo[T: ComparableScalar](Integrator[T]):
             self.status = "FAILURE"
             return (False, f"failed to verify within {self._max_tries} trials")
 
-        p1 = seriessolution(self._fun, self.t, a1, self.order)
+        p1 = seriessol(self._fun, self.t, a1, self.order)
 
         for i in range(len(p0)):
             p0[i].coeffs[-1] = p1[i].coeffs[-1]
@@ -571,7 +571,7 @@ class _Kashi[T: ComparableScalar](Integrator[T], ABC):
         cadd = self.t.operator.cadd
         csub = self.t.operator.csub
 
-        p0 = seriessolution(self._fun, self.t, self.y, self.order)
+        p0 = seriessol(self._fun, self.t, self.y, self.order)
         tmp: Any = ZERO
 
         for i in (self.order, self.order - 1, self.order - 2):

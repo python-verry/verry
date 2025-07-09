@@ -92,7 +92,7 @@ from .tracker import (
     doubletontracker,
     qrtracker,
 )
-from .utility import seriessolution, variationaleq
+from .utility import seriessol, variationaleq
 
 __all__ = [
     "Integrator",
@@ -116,6 +116,6 @@ __all__ = [
     "directtracker",
     "doubletontracker",
     "qrtracker",
-    "seriessolution",
+    "seriessol",
     "variationaleq",
 ]
