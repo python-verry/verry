@@ -13,6 +13,8 @@ from verry.typing import ComparableScalar
 
 
 class VarEqSolver(ABC):
+    """Abstract base class for solvers of variational equations."""
+
     __slots__ = ()
 
     @abstractmethod
@@ -26,27 +28,57 @@ class VarEqSolver(ABC):
         tuple[Literal[True], Interval[T], IntervalMatrix[T]]
         | tuple[Literal[False], str, None]
     ):
+        """Solve variational equations.
+
+        Parameters
+        ----------
+        fun : Callable
+            Right-hand side of the system. The calling signature is ``fun(t, *y)``.
+        t0 : Interval
+            Current time.
+        t1 : Interval
+            Next time.
+        series : Sequence[IntervalSeries]
+            Current interval series.
+        """
         raise NotImplementedError
 
 
 class VarEqSolverFactory(ABC):
+    """Abstract factory for creating a vareqsolver."""
+
     __slots__ = ()
 
     @abstractmethod
     def create(
         self, integrator: IntegratorFactory, intvlmat: type[IntervalMatrix]
     ) -> VarEqSolver:
+        """Create :class:`VarEqSolver`.
+
+        Parameters
+        ----------
+        integrator : IntegratorFactory
+            The integrator passed to :class:`C1Solver`.
+        intvlmat : type[IntervalMatrix]
+            The type of interval matrices used in :class:`C1Solver`.
+
+        Returns
+        -------
+        VarEqSolver
+        """
         raise NotImplementedError
 
 
 class brute(VarEqSolverFactory):
+    """Factory for creating a VarEqSolver that solves variational equations directly."""
+
     __slots__ = ()
 
     def create(self, integrator, intvlmat):
-        return _BruteVarEqSolver(integrator, intvlmat)
+        return BruteVarEqSolver(integrator, intvlmat)
 
 
-class _BruteVarEqSolver(VarEqSolver):
+class BruteVarEqSolver(VarEqSolver):
     __slots__ = ("_integrator", "_intvlmat")
     _integrator: IntegratorFactory
     _intvlmat: type[IntervalMatrix]
@@ -87,6 +119,8 @@ class _BruteVarEqSolver(VarEqSolver):
 
 
 class lognorm(VarEqSolverFactory):
+    """Factory for creating a VarEqSolver that uses logarithmic norm."""
+
     __slots__ = ("order",)
     order: int | None
 
@@ -94,10 +128,10 @@ class lognorm(VarEqSolverFactory):
         self.order = order
 
     def create(self, integrator, intvlmat):
-        return _LogNormVarEqSolver(self.order, intvlmat)
+        return LogNormVarEqSolver(self.order, intvlmat)
 
 
-class _LogNormVarEqSolver(VarEqSolver):
+class LogNormVarEqSolver(VarEqSolver):
     __slots__ = ("_intvlmat", "_order")
     _intvlmat: type[IntervalMatrix]
     _order: int | None

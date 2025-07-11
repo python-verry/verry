@@ -1,10 +1,10 @@
 import dataclasses
 import itertools
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Literal, cast, no_type_check
+from typing import TYPE_CHECKING, Literal, cast
 
 from verry.integrate.integrator import IntegratorFactory, kashi
-from verry.integrate.tracker import TrackerFactory, doubletontracker
+from verry.integrate.tracker import TrackerFactory, doubleton
 from verry.integrate.utility import seriessol, variationaleq
 from verry.integrate.vareqsolver import VarEqSolverFactory, lognorm
 from verry.interval.interval import Interval
@@ -169,7 +169,7 @@ class C0Solver:
             self.integrator = integrator()
 
         if tracker is None:
-            self.tracker = doubletontracker()
+            self.tracker = doubleton()
         elif isinstance(tracker, TrackerFactory):
             self.tracker = tracker
         else:
@@ -386,7 +386,7 @@ class C1Solver:
             self.integrator = integrator()
 
         if tracker is None:
-            self.tracker = doubletontracker()
+            self.tracker = doubleton()
         elif isinstance(tracker, TrackerFactory):
             self.tracker = tracker
         else:

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 from verry import function as vrf
 from verry.integrate.utility import seriessol
@@ -67,6 +67,7 @@ class Integrator[T: ComparableScalar](ABC):
       :math:`s\in(0,t-\hat{t}_{\mathrm{prev}})`.
     """
 
+    __slots__ = ()
     order: int
     series: tuple[IntervalSeries[T], ...] | None
     status: Literal["FAILURE", "RUNNING", "SUCCESS"]
@@ -113,6 +114,8 @@ class Integrator[T: ComparableScalar](ABC):
 class IntegratorFactory[T: ComparableScalar](ABC):
     """Abstract factory for creating an integrator."""
 
+    __slots__ = ()
+
     @abstractmethod
     def create(
         self,
@@ -140,8 +143,17 @@ class IntegratorFactory[T: ComparableScalar](ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    def copy(self) -> Self:
+        """Return a shallow copy of the factory."""
+        raise NotImplementedError
+
+    def __copy__(self) -> Self:
+        return self.copy()
+
 
 class AdaptiveStepIntegratorFactory[T: ComparableScalar](IntegratorFactory[T]):
+    __slots__ = ()
     min_step: T | None
     max_step: T | None
 
@@ -149,7 +161,7 @@ class AdaptiveStepIntegratorFactory[T: ComparableScalar](IntegratorFactory[T]):
 class eilo[T: ComparableScalar](AdaptiveStepIntegratorFactory[T]):
     r"""Factory for creating an integrator based on Eijgenraam and Lohner's algorithm.
 
-    See their publications [#Ei81]_\ [#Lo87]_\ [#Lo92]_ for more details on the theory.
+    See [#Eig81]_\ [#Loh87]_\ [#Loh92]_ for more details on the theory.
 
     Parameters
     ----------
@@ -170,18 +182,19 @@ class eilo[T: ComparableScalar](AdaptiveStepIntegratorFactory[T]):
 
     References
     ----------
-    .. [#Ei81] P. Eijgenraam, *The solution of initial value problems using interval
+    .. [#Eig81] P. Eijgenraam, *The solution of initial value problems using interval
         arithmetic: formulation and analysis of an algorithm*. Amsterdam, Nederland:
         CWI, 1981. [Online]. Available: https://ir.cwi.nl/pub/13004/
-    .. [#Lo87] R. J. Lohner, "Enclosing the Solutions of Ordinary Initial and Boundary
+    .. [#Loh87] R. J. Lohner, "Enclosing the Solutions of Ordinary Initial and Boundary
         Value Problem," in *Computerarithmetic*, E. Kaucher, U. Kulisch, and Ch.
         Ullrich, Eds. Stuttgart, Germany: B. G. Teubner, 1987, pp. 225--286.
-    .. [#Lo92] R. J. Lohner, "Computation of guaranteed enclosures for the solutions of
+    .. [#Loh92] R. J. Lohner, "Computation of guaranteed enclosures for the solutions of
         ordinary initial and boundary value problems," in *Computational Ordinary
         Differential Equations*, J. R. Cash and I. Gladwell, Eds. Oxford, UK: Clarendon
         Press, 1992, pp. 425--435.
     """
 
+    __slots__ = ("min_step", "max_step", "_order", "_rtol", "_atol", "_max_tries")
     min_step: T | None
     max_step: T | None
     _order: int
@@ -212,7 +225,7 @@ class eilo[T: ComparableScalar](AdaptiveStepIntegratorFactory[T]):
         self.max_step = max_step
 
     def create(self, fun, t0, y0, t_bound):
-        return _EiLo(
+        return EiLoIntegrator(
             fun,
             t0,
             y0,
@@ -225,8 +238,18 @@ class eilo[T: ComparableScalar](AdaptiveStepIntegratorFactory[T]):
             self.max_step,
         )
 
+    def copy(self):
+        return self.__class__(
+            self._order,
+            self._rtol,
+            self._atol,
+            self._max_tries,
+            self.min_step,
+            self.max_step,
+        )
 
-class _EiLo[T: ComparableScalar](Integrator[T]):
+
+class EiLoIntegrator[T: ComparableScalar](Integrator[T]):
     status: Literal["FAILURE", "RUNNING", "SUCCESS"]
     t: Interval[T]
     y: tuple[Interval[T], ...]
@@ -408,7 +431,7 @@ class _EiLo[T: ComparableScalar](Integrator[T]):
 class kashi[T: ComparableScalar](AdaptiveStepIntegratorFactory[T]):
     r"""Factory for creating an integrator based on Kashiwagi's algorithm.
 
-    This is an implementation of [#Ka95]_.
+    This is an implementation of [#Kas95]_.
 
     Parameters
     ----------
@@ -429,11 +452,12 @@ class kashi[T: ComparableScalar](AdaptiveStepIntegratorFactory[T]):
 
     References
     ----------
-    .. [#Ka95] M. Kashiwagi, "Power series arithmetic and its application to numerical
+    .. [#Kas95] M. Kashiwagi, "Power series arithmetic and its application to numerical
         validation," in *Proc. 1995 Symposium on Nonlinear Theory and its Applications
         (NOLTA '95)*, Las Vegas, NV, USA, Dec. 10--14, 1995, pp. 251--254.
     """
 
+    __slots__ = ("min_step", "max_step", "_order", "_rtol", "_atol", "_max_tries")
     min_step: T | None
     max_step: T | None
     _order: int
@@ -464,7 +488,7 @@ class kashi[T: ComparableScalar](AdaptiveStepIntegratorFactory[T]):
         self.max_step = max_step
 
     def create(self, fun, t0, y0, t_bound):
-        return _Kashi(
+        return KashiIntegrator(
             fun,
             t0,
             y0,
@@ -477,8 +501,18 @@ class kashi[T: ComparableScalar](AdaptiveStepIntegratorFactory[T]):
             self.max_step,
         )
 
+    def copy(self):
+        return self.__class__(
+            self._order,
+            self._rtol,
+            self._atol,
+            self._max_tries,
+            self.min_step,
+            self.max_step,
+        )
 
-class _Kashi[T: ComparableScalar](Integrator[T], ABC):
+
+class KashiIntegrator[T: ComparableScalar](Integrator[T]):
     status: Literal["FAILURE", "RUNNING", "SUCCESS"]
     t: Interval[T]
     y: tuple[Interval[T], ...]
