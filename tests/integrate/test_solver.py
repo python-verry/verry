@@ -1,7 +1,7 @@
 from verry import function as vrf
 from verry.integrate.integrator import eilo, kashi
 from verry.integrate.solver import C0Solver, C1Solver
-from verry.integrate.vareqenclosure import direct, lognorm
+from verry.integrate.vareqsolver import brute, lognorm
 from verry.interval.floatinterval import FloatInterval as FI
 
 
@@ -15,7 +15,7 @@ def test_a2detest():
 def test_a4detest():
     a = FI("0.0125")
     t_bound = -4 * vrf.log(FI(9) / FI(19))
-    solver = C1Solver(integrator=kashi, vareq=direct)
+    solver = C1Solver(integrator=kashi, vareq=brute)
     r = solver.solve(lambda _, x: (a * x * (20 - x),), FI(0), [FI(1)], t_bound)
     assert r.status == "SUCCESS"
     assert 2 in r.content.y[0]
@@ -31,7 +31,7 @@ def test_explosion():
 
 def test_period():
     PI = 15 * vrf.pi(FI())
-    solver = C1Solver(vareq=direct)
+    solver = C1Solver(vareq=brute)
     r = solver.solve(lambda t, x, y: (y, -x), FI(0), [FI(1), FI(0)], PI)
     assert r.status == "SUCCESS"
     print(r.content.y[0])

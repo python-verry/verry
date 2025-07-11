@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
+from typing import Literal
 
 from verry import function as vrf
 from verry.autodiff.autodiff import jacobian
@@ -11,7 +12,7 @@ from verry.linalg.intervalmatrix import IntervalMatrix
 from verry.typing import ComparableScalar
 
 
-class VarEqEnclosure(ABC):
+class VarEqSolver(ABC):
     __slots__ = ()
 
     @abstractmethod
@@ -21,28 +22,31 @@ class VarEqEnclosure(ABC):
         t0: Interval[T],
         t1: Interval[T],
         series: Sequence[IntervalSeries[T]],
-    ) -> tuple[True, Interval[T], IntervalMatrix[T]] | tuple[False, str, None]:
+    ) -> (
+        tuple[Literal[True], Interval[T], IntervalMatrix[T]]
+        | tuple[Literal[False], str, None]
+    ):
         raise NotImplementedError
 
 
-class VarEqEnclosureFactory(ABC):
+class VarEqSolverFactory(ABC):
     __slots__ = ()
 
     @abstractmethod
     def create(
         self, integrator: IntegratorFactory, intvlmat: type[IntervalMatrix]
-    ) -> VarEqEnclosure:
+    ) -> VarEqSolver:
         raise NotImplementedError
 
 
-class direct(VarEqEnclosureFactory):
+class brute(VarEqSolverFactory):
     __slots__ = ()
 
     def create(self, integrator, intvlmat):
-        return _DirectVarEqEnclosure(integrator, intvlmat)
+        return _BruteVarEqSolver(integrator, intvlmat)
 
 
-class _DirectVarEqEnclosure(VarEqEnclosure):
+class _BruteVarEqSolver(VarEqSolver):
     __slots__ = ("_integrator", "_intvlmat")
     _integrator: IntegratorFactory
     _intvlmat: type[IntervalMatrix]
@@ -57,7 +61,10 @@ class _DirectVarEqEnclosure(VarEqEnclosure):
         t0: Interval[T],
         t1: Interval[T],
         series: Sequence[IntervalSeries[T]],
-    ) -> tuple[True, Interval[T], IntervalMatrix[T]] | tuple[False, str, None]:
+    ) -> (
+        tuple[Literal[True], Interval[T], IntervalMatrix[T]]
+        | tuple[Literal[False], str, None]
+    ):
         n = len(series)
         eye = self._intvlmat.eye(n)
         varfun = variationaleq(fun, lambda t: tuple(x(t - t0) for x in series))
@@ -79,17 +86,18 @@ class _DirectVarEqEnclosure(VarEqEnclosure):
         return (True, t1, jac)
 
 
-class lognorm(VarEqEnclosureFactory):
+class lognorm(VarEqSolverFactory):
+    __slots__ = ("order",)
     order: int | None
 
     def __init__(self, order: int | None = None):
         self.order = order
 
     def create(self, integrator, intvlmat):
-        return _LogNormVarEqEnclosure(self.order, intvlmat)
+        return _LogNormVarEqSolver(self.order, intvlmat)
 
 
-class _LogNormVarEqEnclosure(VarEqEnclosure):
+class _LogNormVarEqSolver(VarEqSolver):
     __slots__ = ("_intvlmat", "_order")
     _intvlmat: type[IntervalMatrix]
     _order: int | None
@@ -104,7 +112,10 @@ class _LogNormVarEqEnclosure(VarEqEnclosure):
         t0: Interval[T],
         t1: Interval[T],
         series: Sequence[IntervalSeries[T]],
-    ) -> tuple[True, Interval[T], IntervalMatrix[T]] | tuple[False, str, None]:
+    ) -> (
+        tuple[Literal[True], Interval[T], IntervalMatrix[T]]
+        | tuple[Literal[False], str, None]
+    ):
         def dfun(t, *y):
             return jacobian(lambda *y: fun(t, *y))(*y)
 

@@ -1,12 +1,12 @@
 import dataclasses
 import itertools
 from collections.abc import Callable, Sequence
-from typing import Literal, no_type_check
+from typing import TYPE_CHECKING, Literal, cast, no_type_check
 
 from verry.integrate.integrator import IntegratorFactory, kashi
 from verry.integrate.tracker import TrackerFactory, doubletontracker
 from verry.integrate.utility import seriessol, variationaleq
-from verry.integrate.vareqenclosure import VarEqEnclosureFactory, lognorm
+from verry.integrate.vareqsolver import VarEqSolverFactory, lognorm
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries
 from verry.linalg.intervalmatrix import IntervalMatrix, resolve_intervalmatrix
@@ -132,7 +132,7 @@ class C0SolverCallbackArg[T: ComparableScalar]:
     series: tuple[IntervalSeries[T], ...]
 
 
-class C0Solver[T1: IntegratorFactory, T2: TrackerFactory]:
+class C0Solver:
     """ODE solver.
 
     Parameters
@@ -153,13 +153,13 @@ class C0Solver[T1: IntegratorFactory, T2: TrackerFactory]:
     """
 
     __slots__ = ("integrator", "tracker")
-    integrator: T1
-    tracker: T2
+    integrator: IntegratorFactory
+    tracker: TrackerFactory
 
     def __init__(
         self,
-        integrator: T1 | Callable[[], T1] | None = None,
-        tracker: T2 | Callable[[], T2] | None = None,
+        integrator: IntegratorFactory | Callable[[], IntegratorFactory] | None = None,
+        tracker: TrackerFactory | Callable[[], TrackerFactory] | None = None,
     ):
         if integrator is None:
             self.integrator = kashi()
@@ -239,10 +239,6 @@ class C0Solver[T1: IntegratorFactory, T2: TrackerFactory]:
         >>> print(r.message)
         failed to determine a step size
         """
-        return self.__solve(fun, t0, y0, t_bound, callback)
-
-    @no_type_check
-    def __solve(self, fun, t0, y0, t_bound, callback):
         if not isinstance(t0, Interval):
             raise TypeError
 
@@ -262,10 +258,17 @@ class C0Solver[T1: IntegratorFactory, T2: TrackerFactory]:
             if not (res := itor.step())[0]:
                 return SolverResult("FAILURE", None, res[1])
 
-            u0 = itor.t_prev
+            u0 = cast(Interval[T], itor.t_prev)
             u1 = itor.t
 
-            varfun = variationaleq(fun, lambda t: tuple(x(t - u0) for x in itor.series))
+            if TYPE_CHECKING:
+                assert itor.series is not None
+                varfun = cast(Callable, ...)
+            else:
+                varfun = variationaleq(
+                    fun, lambda t: tuple(x(t - u0) for x in itor.series)
+                )
+
             tmp = seriessol(fun, u0, tracker.sample(), itor.order - 1)
             a1 = intvlmat([x.eval(u1 - u0) for x in tmp])
             jac = eye.empty_like()
@@ -344,7 +347,7 @@ class C1SolverCallbackArg[T: ComparableScalar]:
     totjac: IntervalMatrix[T]
 
 
-class C1Solver[T1: IntegratorFactory, T2: TrackerFactory, T3: VarEqEnclosureFactory]:
+class C1Solver:
     """ODE solver using variational equations.
 
     Parameters
@@ -365,15 +368,15 @@ class C1Solver[T1: IntegratorFactory, T2: TrackerFactory, T3: VarEqEnclosureFact
     """
 
     __slots__ = ("integrator", "tracker", "vareq")
-    integrator: T1
-    tracker: T2
-    vareq: T3
+    integrator: IntegratorFactory
+    tracker: TrackerFactory
+    vareq: VarEqSolverFactory
 
     def __init__(
         self,
-        integrator: T1 | Callable[[], T1] | None = None,
-        tracker: T2 | Callable[[], T2] | None = None,
-        vareq: T3 | Callable[[], T3] | None = None,
+        integrator: IntegratorFactory | Callable[[], IntegratorFactory] | None = None,
+        tracker: TrackerFactory | Callable[[], TrackerFactory] | None = None,
+        vareq: VarEqSolverFactory | Callable[[], VarEqSolverFactory] | None = None,
     ):
         if integrator is None:
             self.integrator = kashi()
@@ -391,7 +394,7 @@ class C1Solver[T1: IntegratorFactory, T2: TrackerFactory, T3: VarEqEnclosureFact
 
         if vareq is None:
             self.vareq = lognorm()
-        elif isinstance(vareq, VarEqEnclosureFactory):
+        elif isinstance(vareq, VarEqSolverFactory):
             self.vareq = vareq
         else:
             self.vareq = vareq()
@@ -460,10 +463,6 @@ class C1Solver[T1: IntegratorFactory, T2: TrackerFactory, T3: VarEqEnclosureFact
         >>> print(r.message)
         failed to determine a step size
         """
-        return self.__solve(fun, t0, y0, t_bound, callback)
-
-    @no_type_check
-    def __solve(self, fun, t0, y0, t_bound, callback):
         if not isinstance(t0, Interval):
             raise TypeError
 
@@ -482,17 +481,23 @@ class C1Solver[T1: IntegratorFactory, T2: TrackerFactory, T3: VarEqEnclosureFact
         vareq = self.vareq.create(self.integrator, intvlmat)
 
         while miditor.status == "RUNNING" and itor.status == "RUNNING":
+            res: tuple
+
             if not (res := miditor.step())[0]:
                 return SolverResult("FAILURE", None, res[1])
 
             if not (res := itor.step())[0]:
                 return SolverResult("FAILURE", None, res[1])
 
-            u0 = itor.t_prev
+            u0 = cast(Interval[T], itor.t_prev)
             u1 = t_bound
 
             if miditor.status == "RUNNING" or itor.status == "RUNNING":
                 u1 = intvl(min(itor.t.sup, miditor.t.sup))
+
+            if TYPE_CHECKING:
+                assert miditor.series is not None
+                assert itor.series is not None
 
             a1 = intvlmat([x.eval(u1 - u0) for x in miditor.series])
 
