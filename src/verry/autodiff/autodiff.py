@@ -128,7 +128,7 @@ def jacobian[T: tuple, **P](fun: Callable[P, T]) -> Callable[P, tuple[T, ...]]:
     return result
 
 
-def defderiv[**P](
+def _defderiv[**P](
     fun: Callable[P, Any], deriv: Callable[P, Any], *, argnum: int = 0
 ) -> None:
     if "_verry_is_primitive" not in fun.__dict__:
@@ -137,7 +137,7 @@ def defderiv[**P](
     fun.__dict__["_verry_derivs"][argnum] = deriv
 
 
-def primitive[T, **P](fun: Callable[P, T]) -> Callable[P, T]:
+def _primitive[T, **P](fun: Callable[P, T]) -> Callable[P, T]:
     derivs: dict[int, Callable] = {}
 
     @functools.wraps(fun)

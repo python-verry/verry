@@ -65,7 +65,7 @@ class Tracker[T: IntervalMatrix](ABC):
 
 
 class TrackerFactory[T: IntervalMatrix](ABC):
-    """Abstract factory for creating a tracker."""
+    """Abstract factory for creating :class:`Tracker`."""
 
     __slots__ = ()
 
@@ -86,8 +86,10 @@ class TrackerFactory[T: IntervalMatrix](ABC):
 
 
 class affine[T: IntervalMatrix](TrackerFactory[T]):
-    """Factory for creating a tracker using affine arithmetic, usually producing the
-    most accurate result."""
+    """Factory for creating :class:`Tracker` using affine arithmetic.
+
+    This tracker usually produces the most accurate result.
+    """
 
     __slots__ = ("_n", "_m")
     _n: int | None
@@ -98,10 +100,10 @@ class affine[T: IntervalMatrix](TrackerFactory[T]):
         self._m = m
 
     def create(self, x0):
-        return AffineTracker(x0, self._n, self._m)
+        return _AffineTracker(x0, self._n, self._m)
 
 
-class AffineTracker[T: IntervalMatrix](Tracker[T]):
+class _AffineTracker[T: IntervalMatrix](Tracker[T]):
     __slots__ = ("_context", "_current", "_matrix", "_n", "_m")
     _context: Context
     _current: list[AffineForm]
@@ -159,10 +161,10 @@ class direct[T: IntervalMatrix](TrackerFactory[T]):
     __slots__ = ()
 
     def create(self, x0):
-        return DirectTracker(x0)
+        return _DirectTracker(x0)
 
 
-class DirectTracker[T: IntervalMatrix](Tracker[T]):
+class _DirectTracker[T: IntervalMatrix](Tracker[T]):
     __slots__ = ("_current",)
     _current: T
 
@@ -181,7 +183,7 @@ class DirectTracker[T: IntervalMatrix](Tracker[T]):
 
 
 class qr[T: IntervalMatrix](TrackerFactory[T]):
-    """Factory for creating a tracker using a QR decomposition.
+    """Factory for creating :class:`Tracker` using a QR decomposition.
 
     This is an implementation of Evaluation 3 in [#Lo87]_, known as a Lohner's QR
     method.
@@ -194,10 +196,10 @@ class qr[T: IntervalMatrix](TrackerFactory[T]):
     """
 
     def create(self, x0):
-        return QRTracker(x0)
+        return _QRTracker(x0)
 
 
-class QRTracker[T: IntervalMatrix](Tracker[T]):
+class _QRTracker[T: IntervalMatrix](Tracker[T]):
     __slots__ = ("_b", "_m", "_r")
     _b: T
     _m: npt.NDArray
@@ -233,9 +235,11 @@ class QRTracker[T: IntervalMatrix](Tracker[T]):
 
 
 class doubleton[T: IntervalMatrix](TrackerFactory[T]):
-    """Factory for creating a tracker suitable for large initial intervals.
+    """Factory for creating :class:`Tracker` using doubleton method.
 
-    This is an implementation of Evaluation 4 in [#Lo87]_, and the name "doubleton" is
+    This tracker is suitable for large initial intervals.
+
+    This is an implementation of Evaluation 4 in [#Loh87]_, and the name "doubleton" is
     from [#MrZg00]_.
 
     Parameters
@@ -245,7 +249,7 @@ class doubleton[T: IntervalMatrix](TrackerFactory[T]):
 
     References
     ----------
-    .. [#Lo87] R. J. Lohner, "Enclosing the Solutions of Ordinary Initial and Boundary
+    .. [#Loh87] R. J. Lohner, "Enclosing the Solutions of Ordinary Initial and Boundary
         Value Problem," in *Computerarithmetic*, E. Kaucher, U. Kulisch, and Ch.
         Ullrich, Eds. Stuttgart, Germany: B. G. Teubner, 1987, pp. 225--286.
     .. [#MrZg00] M. Mrozek and P. Zgliczy\u0144ski, "Set arithmetic and the enclosing
@@ -267,10 +271,10 @@ class doubleton[T: IntervalMatrix](TrackerFactory[T]):
             self._factory = tracker()
 
     def create(self, x0):
-        return DoubletonTracker(x0, self._factory)
+        return _DoubletonTracker(x0, self._factory)
 
 
-class DoubletonTracker[T: IntervalMatrix](Tracker[T]):
+class _DoubletonTracker[T: IntervalMatrix](Tracker[T]):
     __slots__ = ("_c", "_m", "_r0", "_tracker")
     _c: T
     _m: npt.NDArray

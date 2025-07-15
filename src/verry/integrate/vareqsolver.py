@@ -13,9 +13,26 @@ from verry.typing import ComparableScalar
 
 
 class VarEqSolver(ABC):
-    """Abstract base class for solvers of variational equations."""
+    """Abstract base class for solvers of variational equations.
+
+    This class is usually not instantiated directly, but is created by
+    :class:`VarEqSolverFactory`.
+
+    Attributes
+    ----------
+    t : Interval
+    jac : IntervalMatrix
+        The value that the solution of variational equations takes at `t`.
+
+    Warnings
+    --------
+    The values of `t` and `jac` are undefined if :meth:`solve` has not been invoked or
+    if the previous execution resulted in failure.
+    """
 
     __slots__ = ()
+    t: Interval
+    jac: IntervalMatrix
 
     @abstractmethod
     def solve[T: ComparableScalar](
@@ -24,11 +41,8 @@ class VarEqSolver(ABC):
         t0: Interval[T],
         t1: Interval[T],
         series: Sequence[IntervalSeries[T]],
-    ) -> (
-        tuple[Literal[True], Interval[T], IntervalMatrix[T]]
-        | tuple[Literal[False], str, None]
-    ):
-        """Solve variational equations.
+    ) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+        r"""Solve variational equations.
 
         Parameters
         ----------
@@ -40,12 +54,24 @@ class VarEqSolver(ABC):
             Next time.
         series : Sequence[IntervalSeries]
             Current interval series.
+
+        Returns
+        -------
+        r0 : bool
+            `r0` is ``True`` if and only if `t` and `jac` are successfully updated.
+        r1 : str | None
+            `r1` is ``None`` If `r0` is ``True``; otherwise, `r1` describes the reason
+            for failure.
+
+        Notes
+        -----
+        `t` can be smaller than `t1` even if `r0` is ``True``.
         """
         raise NotImplementedError
 
 
 class VarEqSolverFactory(ABC):
-    """Abstract factory for creating a vareqsolver."""
+    """Abstract factory for creating :class:`VarEqSolver`."""
 
     __slots__ = ()
 
@@ -70,16 +96,17 @@ class VarEqSolverFactory(ABC):
 
 
 class brute(VarEqSolverFactory):
-    """Factory for creating a VarEqSolver that solves variational equations directly."""
+    """Factory for creating :class:`VarEqSolver` that solves variational equations
+    directly."""
 
     __slots__ = ()
 
     def create(self, integrator, intvlmat):
-        return BruteVarEqSolver(integrator, intvlmat)
+        return _BruteVarEqSolver(integrator, intvlmat)
 
 
-class BruteVarEqSolver(VarEqSolver):
-    __slots__ = ("_integrator", "_intvlmat")
+class _BruteVarEqSolver(VarEqSolver):
+    __slots__ = ("t", "jac", "_integrator", "_intvlmat")
     _integrator: IntegratorFactory
     _intvlmat: type[IntervalMatrix]
 
@@ -93,10 +120,7 @@ class BruteVarEqSolver(VarEqSolver):
         t0: Interval[T],
         t1: Interval[T],
         series: Sequence[IntervalSeries[T]],
-    ) -> (
-        tuple[Literal[True], Interval[T], IntervalMatrix[T]]
-        | tuple[Literal[False], str, None]
-    ):
+    ) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         n = len(series)
         eye = self._intvlmat.eye(n)
         varfun = variationaleq(fun, lambda t: tuple(x(t - t0) for x in series))
@@ -104,22 +128,32 @@ class BruteVarEqSolver(VarEqSolver):
 
         for x in varitors:
             if not (res := x.step())[0]:
-                return (False, res[1], None)
+                return (False, res[1])
 
         if any(x.status == "RUNNING" for x in varitors):
             t1 = self._intvlmat.interval(min(x.t.sup for x in varitors))
 
         jac = self._intvlmat.empty((n, n))
 
-        for i in range(n):
-            for j in range(n):
-                jac[i, j] = varitors[j].series[i].eval(t1 - t0)
+        for j in range(n):
+            tmp = varitors[j].series
 
-        return (True, t1, jac)
+            for i in range(n):
+                jac[i, j] = tmp[i].eval(t1 - t0)
+
+        self.t = t1
+        self.jac = jac
+        return (True, None)
 
 
 class lognorm(VarEqSolverFactory):
-    """Factory for creating a VarEqSolver that uses logarithmic norm."""
+    """Factory for creating :class:`VarEqSolver` that uses a logarithmic norm.
+
+    Parameters
+    ----------
+    order : int | None, default=None
+        The order of
+    """
 
     __slots__ = ("order",)
     order: int | None
@@ -128,11 +162,11 @@ class lognorm(VarEqSolverFactory):
         self.order = order
 
     def create(self, integrator, intvlmat):
-        return LogNormVarEqSolver(self.order, intvlmat)
+        return _LogNormVarEqSolver(self.order, intvlmat)
 
 
-class LogNormVarEqSolver(VarEqSolver):
-    __slots__ = ("_intvlmat", "_order")
+class _LogNormVarEqSolver(VarEqSolver):
+    __slots__ = ("t", "jac", "_intvlmat", "_order")
     _intvlmat: type[IntervalMatrix]
     _order: int | None
 
@@ -146,10 +180,7 @@ class LogNormVarEqSolver(VarEqSolver):
         t0: Interval[T],
         t1: Interval[T],
         series: Sequence[IntervalSeries[T]],
-    ) -> (
-        tuple[Literal[True], Interval[T], IntervalMatrix[T]]
-        | tuple[Literal[False], str, None]
-    ):
+    ) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         def dfun(t, *y):
             return jacobian(lambda *y: fun(t, *y))(*y)
 
@@ -190,4 +221,6 @@ class LogNormVarEqSolver(VarEqSolver):
                 tmp2[i].coeffs.append(tmp3[i].coeffs[-1])
                 jac[i, j] = tmp2[i].eval(t1 - t0)
 
-        return (True, t1, jac)
+        self.t = t1
+        self.jac = jac
+        return (True, None)

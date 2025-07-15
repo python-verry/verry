@@ -47,7 +47,7 @@ import mpmath
 import mpmath.ctx_mp_python
 
 from verry.affine import AffineForm
-from verry.autodiff.autodiff import defderiv, primitive
+from verry.autodiff.autodiff import _defderiv, _primitive
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries
 
@@ -75,7 +75,7 @@ def cos(x: float | int, /) -> float: ...
 def cos(x: Any, /) -> Any: ...
 
 
-@primitive
+@_primitive
 def cos(x, /):
     """Cosine."""
     if (fun := getattr(type(x), "_verry_overload_", None)) is not None:
@@ -107,7 +107,7 @@ def e(x: float | int, /) -> float: ...
 def e(x: Any, /) -> Any: ...
 
 
-@primitive
+@_primitive
 def e(x, /):
     """Napier's constant.
 
@@ -148,7 +148,7 @@ def exp(x: float | int, /) -> float: ...
 def exp(x: Any, /) -> Any: ...
 
 
-@primitive
+@_primitive
 def exp(x, /):
     """Exponential.
 
@@ -189,7 +189,7 @@ def ln2(x: float | int, /) -> float: ...
 def ln2(x: Any, /) -> Any: ...
 
 
-@primitive
+@_primitive
 def ln2(x, /):
     """Natural logarithm of 2.
 
@@ -230,7 +230,7 @@ def log(x: float | int, /) -> float: ...
 def log(x: Any, /) -> Any: ...
 
 
-@primitive
+@_primitive
 def log(x, /):
     """Natural logarithm.
 
@@ -271,7 +271,7 @@ def pi(x: float | int, /) -> float: ...
 def pi(x: Any, /) -> Any: ...
 
 
-@primitive
+@_primitive
 def pi(x, /):
     """Pi.
 
@@ -316,7 +316,7 @@ def pow(x: float | int, y: float | int, /) -> float: ...
 def pow(x: Any, y: Any, /) -> Any: ...
 
 
-@primitive
+@_primitive
 def pow(x, y, /):
     """`x` raised to the power `y`.
 
@@ -363,7 +363,7 @@ def sin(x: float | int, /) -> float: ...
 def sin(x: Any, /) -> Any: ...
 
 
-@primitive
+@_primitive
 def sin(x, /):
     """Sine."""
     if fun := getattr(type(x), "_verry_overload_", None):
@@ -395,7 +395,7 @@ def sqrt(x: float | int, /) -> float: ...
 def sqrt(x: Any, /) -> Any: ...
 
 
-@primitive
+@_primitive
 def sqrt(x, /):
     """Square root.
 
@@ -436,7 +436,7 @@ def tan(x: float | int, /) -> float: ...
 def tan(x: Any, /) -> Any: ...
 
 
-@primitive
+@_primitive
 def tan(x, /):
     """Tangent."""
     if fun := getattr(type(x), "_verry_overload_", None):
@@ -467,14 +467,14 @@ _sin = sin
 _sqrt = sqrt
 _tan = tan
 
-defderiv(cos, lambda x: -sin(x))
-defderiv(e, lambda x: x * 0)
-defderiv(exp, exp)
-defderiv(ln2, lambda x: x * 0)
-defderiv(log, lambda x: 1 / x)
-defderiv(pi, lambda x: x * 0)
-defderiv(pow, lambda x, y: y * pow(x, y) / x, argnum=0)
-defderiv(pow, lambda x, y: log(x) * pow(x, y), argnum=1)
-defderiv(sin, cos)
-defderiv(sqrt, lambda x: 1 / (2 * sqrt(x)))
-defderiv(tan, lambda x: 1 / cos(x) ** 2)
+_defderiv(cos, lambda x: -sin(x))
+_defderiv(e, lambda x: x * 0)
+_defderiv(exp, exp)
+_defderiv(ln2, lambda x: x * 0)
+_defderiv(log, lambda x: 1 / x)
+_defderiv(pi, lambda x: x * 0)
+_defderiv(pow, lambda x, y: y * pow(x, y) / x, argnum=0)
+_defderiv(pow, lambda x, y: log(x) * pow(x, y), argnum=1)
+_defderiv(sin, cos)
+_defderiv(sqrt, lambda x: 1 / (2 * sqrt(x)))
+_defderiv(tan, lambda x: 1 / cos(x) ** 2)

@@ -1,7 +1,7 @@
 import dataclasses
 import itertools
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Literal, cast
+from typing import Literal, cast
 
 from verry.integrate.integrator import IntegratorFactory, kashi
 from verry.integrate.tracker import TrackerFactory, doubleton
@@ -144,12 +144,15 @@ class C0Solver:
 
     Notes
     -----
-    The choice of `tracker` has a significant impact on accuracy and computation time.
-    Our recommendations are as follows:
+    A class diagram of :class:`C0Solver` is shown below:
 
-    1. Use :class:`doubletontracker` at first.
-    2. Use :class:`affinetracker` if the solver cannot compute solutions, or the
-       accuracy of solutions is not sufficient.
+    .. mermaid::
+
+        classDiagram
+            C0Solver ..> IntegratorFactory: use
+            C0Solver ..> TrackerFactory: use
+            IntegratorFactory --> Integrator: create
+            TrackerFactory --> Tracker: create
     """
 
     __slots__ = ("integrator", "tracker")
@@ -227,12 +230,12 @@ class C0Solver:
         >>> print(r.status)
         SUCCESS
         >>> print(r.content.y[0])
-        [-1.000001, -0.999999]
+        [-1.00001, -0.99999]
 
         The next example fails due to the blow-up of the solution.
 
-        >>> from verry.integrate import eilo, affinetracker
-        >>> solver = C0Solver(eilo(min_step=1e-4), affinetracker)
+        >>> from verry.integrate import eilo, affine
+        >>> solver = C0Solver(eilo(min_step=1e-4), affine)
         >>> r = solver.solve(lambda t, x: (x**2,), FI(0), [FI(1)], FI(2))
         >>> print(r.status)
         FAILURE
@@ -260,15 +263,7 @@ class C0Solver:
 
             u0 = cast(Interval[T], itor.t_prev)
             u1 = itor.t
-
-            if TYPE_CHECKING:
-                assert itor.series is not None
-                varfun = cast(Callable, ...)
-            else:
-                varfun = variationaleq(
-                    fun, lambda t: tuple(x(t - u0) for x in itor.series)
-                )
-
+            varfun = variationaleq(fun, lambda t: tuple(x(t - u0) for x in itor.series))
             tmp = seriessol(fun, u0, tracker.sample(), itor.order - 1)
             a1 = intvlmat([x.eval(u1 - u0) for x in tmp])
             jac = eye.empty_like()
@@ -356,15 +351,24 @@ class C1Solver:
         The default is :class:`kashi`.
     tracker : TrackerFactory | Callable[[], TrackerFactory], optional
         The default is :class:`doubletontracker`.
+    vareq : VarEqSolverFactory | Callable[[], VarEqSolverFactory], optional
+        The default is :class:`lognorm`.
 
     Notes
     -----
-    The choice of `tracker` has a significant impact on accuracy and computation time.
-    Our recommendations are as follows:
+    A class diagram of :class:`C1Solver` is shown below:
 
-    1. Use :class:`doubletontracker` at first.
-    2. Use :class:`affinetracker` if the solver cannot compute solutions, or the
-       accuracy of solutions is not sufficient.
+    .. mermaid::
+
+        classDiagram
+            C1Solver ..> VarEqSolverFactory: use
+            C1Solver ..> IntegratorFactory: use
+            C1Solver ..> TrackerFactory: use
+            IntegratorFactory --> Integrator: create
+            TrackerFactory --> Tracker: create
+            VarEqSolverFactory --> VarEqSolver: create
+            VarEqSolverFactory ..> IntegratorFactory: use
+
     """
 
     __slots__ = ("integrator", "tracker", "vareq")
@@ -451,12 +455,12 @@ class C1Solver:
         >>> print(r.status)
         SUCCESS
         >>> print(r.content.y[0])
-        [-1.000001, -0.999999]
+        [-1.00001, -0.99999]
 
         The next example fails due to the blow-up of the solution.
 
-        >>> from verry.integrate import eilo, affinetracker
-        >>> solver = C1Solver(eilo(min_step=1e-4), affinetracker)
+        >>> from verry.integrate import eilo, affine
+        >>> solver = C1Solver(eilo(min_step=1e-4), affine)
         >>> r = solver.solve(lambda t, x: (x**2,), FI(0), [FI(1)], FI(2))
         >>> print(r.status)
         FAILURE
@@ -481,8 +485,6 @@ class C1Solver:
         vareq = self.vareq.create(self.integrator, intvlmat)
 
         while miditor.status == "RUNNING" and itor.status == "RUNNING":
-            res: tuple
-
             if not (res := miditor.step())[0]:
                 return SolverResult("FAILURE", None, res[1])
 
@@ -495,19 +497,15 @@ class C1Solver:
             if miditor.status == "RUNNING" or itor.status == "RUNNING":
                 u1 = intvl(min(itor.t.sup, miditor.t.sup))
 
-            if TYPE_CHECKING:
-                assert miditor.series is not None
-                assert itor.series is not None
-
             a1 = intvlmat([x.eval(u1 - u0) for x in miditor.series])
 
             if not (res := vareq.solve(fun, u0, u1, itor.series))[0]:
                 return SolverResult("FAILURE", None, res[1])
 
-            if u1 != res[1]:
-                u1 = res[1]
+            if u1 != vareq.t:
+                u1 = vareq.t
 
-            jac = res[2]
+            jac = vareq.jac
             tracker.update(jac, a1)
             miditor.update(u1, tracker.sample())
             itor.update(u1, y1 := tracker.hull())
