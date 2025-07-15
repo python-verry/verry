@@ -33,6 +33,7 @@ dev = [
     "sphinx>=8.2.3",
     "sphinx-design>=0.6.1",
     "sphinx-favicon>=1.0.1",
+    "sphinxcontrib-mermaid>=1.0.0",
     "taskipy>=1.14.1",
 ]
 

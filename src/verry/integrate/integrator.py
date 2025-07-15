@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 from verry import function as vrf
-from verry.integrate.utility import seriessolution
+from verry.integrate.utility import seriessol
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries, localcontext
 from verry.linalg.intervalmatrix import IntervalMatrix
@@ -26,15 +26,18 @@ class Integrator[T: ComparableScalar](ABC):
         Current state.
     t_bound : Interval
         Boundary time.
-    t_prev : Interval | None
-        Previous time. ``None`` if no steps were made yet.
-    series : tuple[IntervalSeries, ...] | None
-        Current interval series. ``None`` if no steps were made yet.
+    t_prev : Interval
+        Previous time.
+    series : tuple[IntervalSeries, ...]
+        Current interval series.
     order : int
         Degree of `series`.
 
     Warnings
     --------
+    The values of `t`, `y`, `t_prev`, and `series` are undefined if :meth:`step` has not
+    been invoked or if the previous execution resulted in failure.
+
     `fun` must be a :math:`C^\infty`-function on some open interval that contains `t0`
     and `t_bound`. Furthermore, `fun` must neither be a constant nor contain conditional
     branches (cf. :doc:`/userguide/pitfall`).
@@ -51,28 +54,27 @@ class Integrator[T: ComparableScalar](ABC):
     * If `status` is ``"SUCCESS"``, `t` equals `t_bound`, and `y` contains the image of
       `t_bound` under the solution.
 
-    Here :math:`\phi(t;t_0,y_0)` denotes a time-dependent flow of ODEs. Suppose that
-    :math:`(\hat{t}_{\mathrm{prev}},\hat{y}_{\mathrm{prev}})` is an arbitrary element of
-    the Cartesian product of :math:`[t_{\mathrm{prev}}]` and
-    :math:`[y_{\mathrm{prev}}]`. Let :math:`d` be `order`, and
-    :math:`q_{\mathrm{apx}}(s)` be a (:math:`d-1`)-th order Taylor polynomial of
-    :math:`\phi(\hat{t}_{\mathrm{prev}}+s;\hat{t}_{\mathrm{prev}},
-    \hat{y}_{\mathrm{prev}})`. Also, let :math:`[p(s)]=[p_{\mathrm{apx}}(s)]+[a]s^d` be
-    `series`, assuming that the degree of :math:`[p_{\mathrm{apx}}(s)]` is smaller than
-    :math:`d`. Then :math:`[p(s)]` must satisfy the following conditions:
+    Here :math:`\phi(t;t_0,y_0)` denotes a time-dependent flow of ODEs.
+    Suppose that :math:`(t_{\rm prev},y_{\rm prev})` is an arbitrary element of the
+    Cartesian product of :math:`[t_{\rm prev}]` and :math:`[y_{\rm prev}]`.
+    Let :math:`d` be `order`, and :math:`q_{\rm apx}(s)` be a (:math:`d-1`)-th order
+    Taylor polynomial of :math:`\phi(t_{\rm prev}+s;t_{\rm prev},y_{\rm prev})`.
+    Also, let :math:`[p(s)]=[p_{\rm apx}(s)]+[a]s^d` be `series`, assuming that the
+    degree of :math:`[p_{\rm apx}(s)]` is smaller than :math:`d`.
+    Then :math:`[p(s)]` must satisfy the following conditions:
 
-    * :math:`q_{\mathrm{apx}}(s)\in[p_{\mathrm{apx}}(s)]` holds coefficient-wise.
-    * :math:`\phi(\hat{t}_{\mathrm{prev}}+s;\hat{t}_{\mathrm{prev}},
-      \hat{y}_{\mathrm{prev}})-q_{\mathrm{apx}}(s)\in [a]s^d` holds for all
-      :math:`s\in(0,t-\hat{t}_{\mathrm{prev}})`.
+    * :math:`q_{\rm apx}(s)\in[p_{\rm apx}(s)]` holds coefficient-wise.
+    * :math:`\phi(t_{\rm prev}+s;t_{\rm prev},y_{\rm prev})-q_{\rm apx}(s)\in [a]s^d`
+      holds for all :math:`s\in(0,t-t_{\rm prev})`.
     """
 
+    __slots__ = ()
     order: int
-    series: tuple[IntervalSeries[T], ...] | None
+    series: tuple[IntervalSeries[T], ...]
     status: Literal["FAILURE", "RUNNING", "SUCCESS"]
     t: Interval[T]
     t_bound: Interval[T]
-    t_prev: Interval[T] | None
+    t_prev: Interval[T]
     y: tuple[Interval[T], ...]
 
     @abstractmethod
@@ -111,7 +113,9 @@ class Integrator[T: ComparableScalar](ABC):
 
 
 class IntegratorFactory[T: ComparableScalar](ABC):
-    """Abstract factory for creating an integrator."""
+    """Abstract factory for creating :class:`Integrator`."""
+
+    __slots__ = ()
 
     @abstractmethod
     def create(
@@ -140,11 +144,26 @@ class IntegratorFactory[T: ComparableScalar](ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    def copy(self) -> Self:
+        """Return a shallow copy of the factory."""
+        raise NotImplementedError
 
-class eilo[T: ComparableScalar](IntegratorFactory[T]):
-    r"""Factory for creating an integrator based on Eijgenraam and Lohner's algorithm.
+    def __copy__(self) -> Self:
+        return self.copy()
 
-    See their publications [#Ei81]_\ [#Lo87]_\ [#Lo92]_ for more details on the theory.
+
+class AdaptiveStepIntegratorFactory[T: ComparableScalar](IntegratorFactory[T]):
+    __slots__ = ()
+    min_step: T | None
+    max_step: T | None
+
+
+class eilo[T: ComparableScalar](AdaptiveStepIntegratorFactory[T]):
+    r"""Factory for creating :class:`Integrator` based on Eijgenraam and Lohner's
+    algorithm.
+
+    See [#Eig81]_\ [#Loh87]_\ [#Loh92]_ for more details on the theory.
 
     Parameters
     ----------
@@ -165,24 +184,25 @@ class eilo[T: ComparableScalar](IntegratorFactory[T]):
 
     References
     ----------
-    .. [#Ei81] P. Eijgenraam, *The solution of initial value problems using interval
+    .. [#Eig81] P. Eijgenraam, *The solution of initial value problems using interval
         arithmetic: formulation and analysis of an algorithm*. Amsterdam, Nederland:
         CWI, 1981. [Online]. Available: https://ir.cwi.nl/pub/13004/
-    .. [#Lo87] R. J. Lohner, "Enclosing the Solutions of Ordinary Initial and Boundary
+    .. [#Loh87] R. J. Lohner, "Enclosing the Solutions of Ordinary Initial and Boundary
         Value Problem," in *Computerarithmetic*, E. Kaucher, U. Kulisch, and Ch.
         Ullrich, Eds. Stuttgart, Germany: B. G. Teubner, 1987, pp. 225--286.
-    .. [#Lo92] R. J. Lohner, "Computation of guaranteed enclosures for the solutions of
+    .. [#Loh92] R. J. Lohner, "Computation of guaranteed enclosures for the solutions of
         ordinary initial and boundary value problems," in *Computational Ordinary
         Differential Equations*, J. R. Cash and I. Gladwell, Eds. Oxford, UK: Clarendon
         Press, 1992, pp. 425--435.
     """
 
+    __slots__ = ("min_step", "max_step", "_order", "_rtol", "_atol", "_max_tries")
+    min_step: T | None
+    max_step: T | None
     _order: int
-    _rtol: T
+    _rtol: T | float | int
     _atol: T | float | int
     _max_tries: int
-    _min_step: T | None
-    _max_step: T | None
 
     def __init__(
         self,
@@ -203,11 +223,11 @@ class eilo[T: ComparableScalar](IntegratorFactory[T]):
         self._rtol = rtol
         self._atol = atol
         self._max_tries = max_tries
-        self._min_step = min_step
-        self._max_step = max_step
+        self.min_step = min_step
+        self.max_step = max_step
 
     def create(self, fun, t0, y0, t_bound):
-        return _EiLo(
+        return _EiLoIntegrator(
             fun,
             t0,
             y0,
@@ -216,19 +236,22 @@ class eilo[T: ComparableScalar](IntegratorFactory[T]):
             self._rtol,
             self._atol,
             self._max_tries,
-            self._min_step,
-            self._max_step,
+            self.min_step,
+            self.max_step,
+        )
+
+    def copy(self):
+        return self.__class__(
+            self._order,
+            self._rtol,
+            self._atol,
+            self._max_tries,
+            self.min_step,
+            self.max_step,
         )
 
 
-class _EiLo[T: ComparableScalar](Integrator[T]):
-    status: Literal["FAILURE", "RUNNING", "SUCCESS"]
-    t: Interval[T]
-    y: tuple[Interval[T], ...]
-    t_bound: Interval[T]
-    t_prev: Interval[T] | None
-    series: tuple[IntervalSeries[T], ...] | None
-    order: int
+class _EiLoIntegrator[T: ComparableScalar](Integrator[T]):
     _fun: Callable
     _rtol: T
     _atol: T
@@ -259,8 +282,6 @@ class _EiLo[T: ComparableScalar](Integrator[T]):
         self.t = t0
         self.y = tuple(y0)
         self.t_bound = t_bound
-        self.t_prev = None
-        self.series = None
         self.order = order
         self._fun = fun
         self._max_tries = max_tries
@@ -314,7 +335,7 @@ class _EiLo[T: ComparableScalar](Integrator[T]):
         cadd = self.t.operator.cadd
         csub = self.t.operator.csub
 
-        p0 = seriessolution(self._fun, self.t, self.y, self.order)
+        p0 = seriessol(self._fun, self.t, self.y, self.order)
         tmp = ZERO
 
         for i in (self.order, self.order - 1, self.order - 2):
@@ -376,7 +397,7 @@ class _EiLo[T: ComparableScalar](Integrator[T]):
             self.status = "FAILURE"
             return (False, f"failed to verify within {self._max_tries} trials")
 
-        p1 = seriessolution(self._fun, self.t, a1, self.order)
+        p1 = seriessol(self._fun, self.t, a1, self.order)
 
         for i in range(len(p0)):
             p0[i].coeffs[-1] = p1[i].coeffs[-1]
@@ -400,10 +421,10 @@ class _EiLo[T: ComparableScalar](Integrator[T]):
         self.y = tuple(x.copy() for x in y)
 
 
-class kashi[T: ComparableScalar](IntegratorFactory[T]):
-    r"""Factory for creating an integrator based on Kashiwagi's algorithm.
+class kashi[T: ComparableScalar](AdaptiveStepIntegratorFactory[T]):
+    r"""Factory for creating :class:`Integrator` based on Kashiwagi's algorithm.
 
-    This is an implementation of [#Ka95]_.
+    This is an implementation of [#Kas95]_.
 
     Parameters
     ----------
@@ -424,17 +445,18 @@ class kashi[T: ComparableScalar](IntegratorFactory[T]):
 
     References
     ----------
-    .. [#Ka95] M. Kashiwagi, "Power series arithmetic and its application to numerical
+    .. [#Kas95] M. Kashiwagi, "Power series arithmetic and its application to numerical
         validation," in *Proc. 1995 Symposium on Nonlinear Theory and its Applications
         (NOLTA '95)*, Las Vegas, NV, USA, Dec. 10--14, 1995, pp. 251--254.
     """
 
+    __slots__ = ("min_step", "max_step", "_order", "_rtol", "_atol", "_max_tries")
+    min_step: T | None
+    max_step: T | None
     _order: int
-    _rtol: T
+    _rtol: T | float | int
     _atol: T | float | int
     _max_tries: int
-    _min_step: T | None
-    _max_step: T | None
 
     def __init__(
         self,
@@ -455,11 +477,11 @@ class kashi[T: ComparableScalar](IntegratorFactory[T]):
         self._rtol = rtol
         self._atol = atol
         self._max_tries = max_tries
-        self._min_step = min_step
-        self._max_step = max_step
+        self.min_step = min_step
+        self.max_step = max_step
 
     def create(self, fun, t0, y0, t_bound):
-        return _Kashi(
+        return _KashiIntegrator(
             fun,
             t0,
             y0,
@@ -468,19 +490,22 @@ class kashi[T: ComparableScalar](IntegratorFactory[T]):
             self._rtol,
             self._atol,
             self._max_tries,
-            self._min_step,
-            self._max_step,
+            self.min_step,
+            self.max_step,
+        )
+
+    def copy(self):
+        return self.__class__(
+            self._order,
+            self._rtol,
+            self._atol,
+            self._max_tries,
+            self.min_step,
+            self.max_step,
         )
 
 
-class _Kashi[T: ComparableScalar](Integrator[T], ABC):
-    status: Literal["FAILURE", "RUNNING", "SUCCESS"]
-    t: Interval[T]
-    y: tuple[Interval[T], ...]
-    t_bound: Interval[T]
-    t_prev: Interval[T] | None
-    series: tuple[IntervalSeries[T], ...] | None
-    order: int
+class _KashiIntegrator[T: ComparableScalar](Integrator[T]):
     _fun: Callable
     _rtol: T
     _atol: T
@@ -511,8 +536,6 @@ class _Kashi[T: ComparableScalar](Integrator[T], ABC):
         self.t = t0
         self.y = tuple(y0)
         self.t_bound = t_bound
-        self.t_prev = None
-        self.series = None
         self.order = order
         self._fun = fun
         self._max_tries = max_tries
@@ -566,7 +589,7 @@ class _Kashi[T: ComparableScalar](Integrator[T], ABC):
         cadd = self.t.operator.cadd
         csub = self.t.operator.csub
 
-        p0 = seriessolution(self._fun, self.t, self.y, self.order)
+        p0 = seriessol(self._fun, self.t, self.y, self.order)
         tmp: Any = ZERO
 
         for i in (self.order, self.order - 1, self.order - 2):

@@ -48,10 +48,21 @@ Trackers
 
     Tracker
     TrackerFactory
-    affinetracker
-    directtracker
-    doubletontracker
-    qrtracker
+    affine
+    direct
+    doubleton
+    qr
+
+VarEqSolvers
+------------
+
+.. autosummary::
+    :toctree: generated/
+
+    VarEqSolver
+    VarEqSolverFactory
+    brute
+    lognorm
 
 Miscellaneous
 -------------
@@ -66,7 +77,7 @@ Miscellaneous
     C1SolverResultContent
     OdeSolution
     SolverResult
-    seriessolution
+    seriessol
     variationaleq
 
 """
@@ -87,12 +98,13 @@ from .solver import (
 from .tracker import (
     Tracker,
     TrackerFactory,
-    affinetracker,
-    directtracker,
-    doubletontracker,
-    qrtracker,
+    affine,
+    direct,
+    doubleton,
+    qr,
 )
-from .utility import seriessolution, variationaleq
+from .utility import seriessol, variationaleq
+from .vareqsolver import VarEqSolver, VarEqSolverFactory, brute, lognorm
 
 __all__ = [
     "Integrator",
@@ -112,10 +124,14 @@ __all__ = [
     "SolverResult",
     "Tracker",
     "TrackerFactory",
-    "affinetracker",
-    "directtracker",
-    "doubletontracker",
-    "qrtracker",
-    "seriessolution",
+    "affine",
+    "direct",
+    "doubleton",
+    "qr",
+    "seriessol",
     "variationaleq",
+    "VarEqSolver",
+    "VarEqSolverFactory",
+    "brute",
+    "lognorm",
 ]

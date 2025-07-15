@@ -1,11 +1,12 @@
 import dataclasses
 import itertools
 from collections.abc import Callable, Sequence
-from typing import Literal, no_type_check
+from typing import Literal, cast
 
 from verry.integrate.integrator import IntegratorFactory, kashi
-from verry.integrate.tracker import TrackerFactory, doubletontracker
-from verry.integrate.utility import seriessolution, variationaleq
+from verry.integrate.tracker import TrackerFactory, doubleton
+from verry.integrate.utility import seriessol, variationaleq
+from verry.integrate.vareqsolver import VarEqSolverFactory, lognorm
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries
 from verry.linalg.intervalmatrix import IntervalMatrix, resolve_intervalmatrix
@@ -25,6 +26,23 @@ class AbortSolving(Exception):
     def __init__(self, message="aborted", *args, **kwargs):
         super().__init__(message, *args, **kwargs)
         self.message = message
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class SolverResult[T1, T2: Literal["ABORTED", "FAILURE", "SUCCESS"]]:
+    """Output of ODE solvers.
+
+    Attributes
+    ----------
+    status : Literal["ABORTED", "FAILURE", "SUCCESS"]
+    content
+    message : str
+        Report from the solver. Typically a reason for a failure.
+    """
+
+    status: T2
+    content: T1
+    message: str
 
 
 class OdeSolution[T: ComparableScalar]:
@@ -71,23 +89,6 @@ class OdeSolution[T: ComparableScalar]:
             raise ValueError
 
         return tuple(result)
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class SolverResult[T1, T2: Literal["ABORTED", "FAILURE", "SUCCESS"]]:
-    """Output of ODE solvers.
-
-    Attributes
-    ----------
-    status : Literal["ABORTED", "FAILURE", "SUCCESS"]
-    content
-    message : str
-        Report from the solver. Typically a reason for a failure.
-    """
-
-    status: T2
-    content: T1
-    message: str
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -143,17 +144,20 @@ class C0Solver:
 
     Notes
     -----
-    The choice of `tracker` has a significant impact on accuracy and computation time.
-    Our recommendations are as follows:
+    A class diagram of :class:`C0Solver` is shown below:
 
-    1. Use :class:`doubletontracker` at first.
-    2. Use :class:`affinetracker` if the solver cannot compute solutions, or the
-       accuracy of solutions is not sufficient.
+    .. mermaid::
+
+        classDiagram
+            C0Solver ..> IntegratorFactory: use
+            C0Solver ..> TrackerFactory: use
+            IntegratorFactory --> Integrator: create
+            TrackerFactory --> Tracker: create
     """
 
-    __slots__ = ("_integrator", "_tracker")
-    _integrator: IntegratorFactory
-    _tracker: TrackerFactory
+    __slots__ = ("integrator", "tracker")
+    integrator: IntegratorFactory
+    tracker: TrackerFactory
 
     def __init__(
         self,
@@ -161,18 +165,18 @@ class C0Solver:
         tracker: TrackerFactory | Callable[[], TrackerFactory] | None = None,
     ):
         if integrator is None:
-            self._integrator = kashi()
+            self.integrator = kashi()
         elif isinstance(integrator, IntegratorFactory):
-            self._integrator = integrator
+            self.integrator = integrator
         else:
-            self._integrator = integrator()
+            self.integrator = integrator()
 
         if tracker is None:
-            self._tracker = doubletontracker()
+            self.tracker = doubleton()
         elif isinstance(tracker, TrackerFactory):
-            self._tracker = tracker
+            self.tracker = tracker
         else:
-            self._tracker = tracker()
+            self.tracker = tracker()
 
     def solve[T: ComparableScalar](
         self,
@@ -226,22 +230,18 @@ class C0Solver:
         >>> print(r.status)
         SUCCESS
         >>> print(r.content.y[0])
-        [-1.000001, -0.999999]
+        [-1.00001, -0.99999]
 
         The next example fails due to the blow-up of the solution.
 
-        >>> from verry.integrate import eilo, affinetracker
-        >>> solver = C0Solver(eilo(min_step=1e-4), affinetracker)
+        >>> from verry.integrate import eilo, affine
+        >>> solver = C0Solver(eilo(min_step=1e-4), affine)
         >>> r = solver.solve(lambda t, x: (x**2,), FI(0), [FI(1)], FI(2))
         >>> print(r.status)
         FAILURE
         >>> print(r.message)
         failed to determine a step size
         """
-        return self.__solve(fun, t0, y0, t_bound, callback)
-
-    @no_type_check
-    def __solve(self, fun, t0, y0, t_bound, callback):
         if not isinstance(t0, Interval):
             raise TypeError
 
@@ -254,30 +254,31 @@ class C0Solver:
         ts = [t0.inf]
         series = []
 
-        tracker = self._tracker.create(y0)
-        itor = self._integrator.create(fun, t0, tracker.hull(), t_bound)
+        tracker = self.tracker.create(y0)
+        itor = self.integrator.create(fun, t0, tracker.hull(), t_bound)
 
         while itor.status == "RUNNING":
             if not (res := itor.step())[0]:
                 return SolverResult("FAILURE", None, res[1])
 
-            u0 = itor.t_prev
+            u0 = cast(Interval[T], itor.t_prev)
             u1 = itor.t
-
             varfun = variationaleq(fun, lambda t: tuple(x(t - u0) for x in itor.series))
-            tmp = seriessolution(fun, u0, tracker.sample(), itor.order - 1)
+            tmp = seriessol(fun, u0, tracker.sample(), itor.order - 1)
             a1 = intvlmat([x.eval(u1 - u0) for x in tmp])
             jac = eye.empty_like()
 
-            for i in range(len(y0)):
-                tmp = seriessolution(varfun, u0, eye[i], itor.order - 1)
-                a1[i] += itor.series[i].coeffs[-1] * (u1 - u0) ** itor.order
-                jac[:, i] = intvlmat([x.eval(u1 - u0) for x in tmp])
+            for j in range(len(y0)):
+                tmp = seriessol(varfun, u0, eye[j], itor.order - 1)
+                a1[j] += itor.series[j].coeffs[-1] * (u1 - u0) ** itor.order
+
+                for i in range(len(y0)):
+                    jac[i, j] = tmp[i].eval(u1 - u0)
 
             tracker.update(jac, a1)
             itor.update(u1, y1 := tracker.hull())
 
-            ts.append(u1.sup)
+            ts.append(u1.inf)
             series.append(itor.series)
 
             if callback is not None:
@@ -350,39 +351,57 @@ class C1Solver:
         The default is :class:`kashi`.
     tracker : TrackerFactory | Callable[[], TrackerFactory], optional
         The default is :class:`doubletontracker`.
+    vareq : VarEqSolverFactory | Callable[[], VarEqSolverFactory], optional
+        The default is :class:`lognorm`.
 
     Notes
     -----
-    The choice of `tracker` has a significant impact on accuracy and computation time.
-    Our recommendations are as follows:
+    A class diagram of :class:`C1Solver` is shown below:
 
-    1. Use :class:`doubletontracker` at first.
-    2. Use :class:`affinetracker` if the solver cannot compute solutions, or the
-       accuracy of solutions is not sufficient.
+    .. mermaid::
+
+        classDiagram
+            C1Solver ..> VarEqSolverFactory: use
+            C1Solver ..> IntegratorFactory: use
+            C1Solver ..> TrackerFactory: use
+            IntegratorFactory --> Integrator: create
+            TrackerFactory --> Tracker: create
+            VarEqSolverFactory --> VarEqSolver: create
+            VarEqSolverFactory ..> IntegratorFactory: use
+
     """
 
-    __slots__ = ("_integrator", "_tracker")
-    _integrator: IntegratorFactory
-    _tracker: TrackerFactory
+    __slots__ = ("integrator", "tracker", "vareq")
+    integrator: IntegratorFactory
+    tracker: TrackerFactory
+    vareq: VarEqSolverFactory
 
     def __init__(
         self,
         integrator: IntegratorFactory | Callable[[], IntegratorFactory] | None = None,
         tracker: TrackerFactory | Callable[[], TrackerFactory] | None = None,
+        vareq: VarEqSolverFactory | Callable[[], VarEqSolverFactory] | None = None,
     ):
         if integrator is None:
-            self._integrator = kashi()
+            self.integrator = kashi()
         elif isinstance(integrator, IntegratorFactory):
-            self._integrator = integrator
+            self.integrator = integrator
         else:
-            self._integrator = integrator()
+            self.integrator = integrator()
 
         if tracker is None:
-            self._tracker = doubletontracker()
+            self.tracker = doubleton()
         elif isinstance(tracker, TrackerFactory):
-            self._tracker = tracker
+            self.tracker = tracker
         else:
-            self._tracker = tracker()
+            self.tracker = tracker()
+
+        if vareq is None:
+            self.vareq = lognorm()
+        elif isinstance(vareq, VarEqSolverFactory):
+            self.vareq = vareq
+        else:
+            self.vareq = vareq()
 
     def solve[T: ComparableScalar](
         self,
@@ -436,22 +455,18 @@ class C1Solver:
         >>> print(r.status)
         SUCCESS
         >>> print(r.content.y[0])
-        [-1.000001, -0.999999]
+        [-1.00001, -0.99999]
 
         The next example fails due to the blow-up of the solution.
 
-        >>> from verry.integrate import eilo, affinetracker
-        >>> solver = C1Solver(eilo(min_step=1e-4), affinetracker)
+        >>> from verry.integrate import eilo, affine
+        >>> solver = C1Solver(eilo(min_step=1e-4), affine)
         >>> r = solver.solve(lambda t, x: (x**2,), FI(0), [FI(1)], FI(2))
         >>> print(r.status)
         FAILURE
         >>> print(r.message)
         failed to determine a step size
         """
-        return self.__solve(fun, t0, y0, t_bound, callback)
-
-    @no_type_check
-    def __solve(self, fun, t0, y0, t_bound, callback):
         if not isinstance(t0, Interval):
             raise TypeError
 
@@ -460,14 +475,14 @@ class C1Solver:
 
         intvl = type(t0)
         intvlmat = type(y0)
-        eye = intvlmat.eye(len(y0))
         ts = [t0.inf]
         series = []
         totjac = intvlmat.eye(len(y0))
 
-        tracker = self._tracker.create(y0)
-        miditor = self._integrator.create(fun, t0, tracker.sample(), t_bound)
-        itor = self._integrator.create(fun, t0, tracker.hull(), t_bound)
+        tracker = self.tracker.create(y0)
+        miditor = self.integrator.create(fun, t0, tracker.sample(), t_bound)
+        itor = self.integrator.create(fun, t0, tracker.hull(), t_bound)
+        vareq = self.vareq.create(self.integrator, intvlmat)
 
         while miditor.status == "RUNNING" and itor.status == "RUNNING":
             if not (res := miditor.step())[0]:
@@ -476,34 +491,26 @@ class C1Solver:
             if not (res := itor.step())[0]:
                 return SolverResult("FAILURE", None, res[1])
 
-            u0 = itor.t_prev
+            u0 = cast(Interval[T], itor.t_prev)
             u1 = t_bound
 
             if miditor.status == "RUNNING" or itor.status == "RUNNING":
                 u1 = intvl(min(itor.t.sup, miditor.t.sup))
 
-            varfun = variationaleq(fun, lambda t: tuple(x(t - u0) for x in itor.series))
-            varitors = [self._integrator.create(varfun, u0, x, u1) for x in eye]
-
-            for x in varitors:
-                if not (res := x.step())[0]:
-                    return SolverResult("FAILURE", None, res[1])
-
-            if any(x.status == "RUNNING" for x in varitors):
-                u1 = intvl(min(x.t.sup for x in varitors))
-
             a1 = intvlmat([x.eval(u1 - u0) for x in miditor.series])
-            jac = totjac.empty_like()
 
-            for i in range(len(y0)):
-                tmp = [x.eval(u1 - u0) for x in varitors[i].series]
-                jac[:, i] = intvlmat(tmp)
+            if not (res := vareq.solve(fun, u0, u1, itor.series))[0]:
+                return SolverResult("FAILURE", None, res[1])
 
+            if u1 != vareq.t:
+                u1 = vareq.t
+
+            jac = vareq.jac
             tracker.update(jac, a1)
             miditor.update(u1, tracker.sample())
             itor.update(u1, y1 := tracker.hull())
 
-            ts.append(u1.sup)
+            ts.append(u1.inf)
             series.append(itor.series)
             totjac = jac @ totjac
 

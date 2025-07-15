@@ -10,6 +10,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.mathjax",
+    "sphinxcontrib.mermaid",
     "sphinx.ext.napoleon",
     "sphinx.ext.extlinks",
     "sphinx_design",

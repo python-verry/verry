@@ -65,7 +65,7 @@ class Tracker[T: IntervalMatrix](ABC):
 
 
 class TrackerFactory[T: IntervalMatrix](ABC):
-    """Abstract factory for creating a tracker."""
+    """Abstract factory for creating :class:`Tracker`."""
 
     __slots__ = ()
 
@@ -85,9 +85,11 @@ class TrackerFactory[T: IntervalMatrix](ABC):
         raise NotImplementedError
 
 
-class affinetracker[T: IntervalMatrix](TrackerFactory[T]):
-    """Factory for creating a tracker using affine arithmetic, usually producing the
-    most accurate result."""
+class affine[T: IntervalMatrix](TrackerFactory[T]):
+    """Factory for creating :class:`Tracker` using affine arithmetic.
+
+    This tracker usually produces the most accurate result.
+    """
 
     __slots__ = ("_n", "_m")
     _n: int | None
@@ -153,7 +155,7 @@ class _AffineTracker[T: IntervalMatrix](Tracker[T]):
             setcontext(ctx)
 
 
-class directtracker[T: IntervalMatrix](TrackerFactory[T]):
+class direct[T: IntervalMatrix](TrackerFactory[T]):
     """Factory for creating the most obvious tracker."""
 
     __slots__ = ()
@@ -180,8 +182,8 @@ class _DirectTracker[T: IntervalMatrix](Tracker[T]):
         self._current = a @ (curr - curr.mid()) + b
 
 
-class qrtracker[T: IntervalMatrix](TrackerFactory[T]):
-    """Factory for creating a tracker using a QR decomposition.
+class qr[T: IntervalMatrix](TrackerFactory[T]):
+    """Factory for creating :class:`Tracker` using a QR decomposition.
 
     This is an implementation of Evaluation 3 in [#Lo87]_, known as a Lohner's QR
     method.
@@ -232,10 +234,12 @@ class _QRTracker[T: IntervalMatrix](Tracker[T]):
         self._r = (p1 @ a @ q0) @ self._r + p1 @ (b - self._m)
 
 
-class doubletontracker[T: IntervalMatrix](TrackerFactory[T]):
-    """Factory for creating a tracker suitable for large initial intervals.
+class doubleton[T: IntervalMatrix](TrackerFactory[T]):
+    """Factory for creating :class:`Tracker` using doubleton method.
 
-    This is an implementation of Evaluation 4 in [#Lo87]_, and the name "doubleton" is
+    This tracker is suitable for large initial intervals.
+
+    This is an implementation of Evaluation 4 in [#Loh87]_, and the name "doubleton" is
     from [#MrZg00]_.
 
     Parameters
@@ -245,7 +249,7 @@ class doubletontracker[T: IntervalMatrix](TrackerFactory[T]):
 
     References
     ----------
-    .. [#Lo87] R. J. Lohner, "Enclosing the Solutions of Ordinary Initial and Boundary
+    .. [#Loh87] R. J. Lohner, "Enclosing the Solutions of Ordinary Initial and Boundary
         Value Problem," in *Computerarithmetic*, E. Kaucher, U. Kulisch, and Ch.
         Ullrich, Eds. Stuttgart, Germany: B. G. Teubner, 1987, pp. 225--286.
     .. [#MrZg00] M. Mrozek and P. Zgliczy\u0144ski, "Set arithmetic and the enclosing
@@ -260,7 +264,7 @@ class doubletontracker[T: IntervalMatrix](TrackerFactory[T]):
         self, tracker: TrackerFactory[T] | Callable[[], TrackerFactory[T]] | None = None
     ):
         if tracker is None:
-            self._factory = qrtracker()
+            self._factory = qr()
         elif isinstance(tracker, TrackerFactory):
             self._factory = tracker
         else:

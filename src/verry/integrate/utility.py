@@ -7,7 +7,7 @@ from verry.linalg.intervalmatrix import IntervalMatrix
 from verry.typing import ComparableScalar
 
 
-def seriessolution[T: ComparableScalar](
+def seriessol[T: ComparableScalar](
     fun: Callable,
     t0: Interval[T],
     y0: IntervalMatrix[T] | Sequence[Interval[T]],
@@ -74,11 +74,11 @@ def variationaleq(fun: Callable, sol: Callable) -> Callable:
 
     Notes
     -----
-    Variational equations of ODEs :math:`\mathrm{d}x/\mathrm{d}t=f(t,x)` are defined as
+    Variational equations of ODEs :math:`\mathrm{d}y/\mathrm{d}t=f(t,y)` are defined as
 
-    .. math:: \frac{\mathrm{d}v}{\mathrm{d}t} = (v\cdot\nabla)f(t,x),
+    .. math:: \frac{\mathrm{d}v}{\mathrm{d}t} = (v\cdot\nabla)f(t,y),
 
-    where :math:`x=\phi(t)` is a solution of ODEs.
+    where :math:`y=\phi(t)` is a solution of ODEs.
     """
 
     def result(t, *v):
