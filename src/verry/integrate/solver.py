@@ -45,7 +45,7 @@ class SolverResult[T1, T2: Literal["ABORTED", "FAILURE", "SUCCESS"]]:
     message: str
 
 
-class OdeSolution[T: ComparableScalar]:
+class ODESolution[T: ComparableScalar]:
     """Solution of ODEs.
 
     Attributes
@@ -107,7 +107,7 @@ class C0SolverResultContent[T: ComparableScalar]:
 
     t: Interval[T]
     y: tuple[Interval[T], ...]
-    sol: OdeSolution[T]
+    sol: ODESolution[T]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -140,19 +140,7 @@ class C0Solver:
     integrator : IntegratorFactory | Callable[[], IntegratorFactory], optional
         The default is :class:`kashi`.
     tracker : TrackerFactory | Callable[[], TrackerFactory], optional
-        The default is :class:`doubletontracker`.
-
-    Notes
-    -----
-    A class diagram of :class:`C0Solver` is shown below:
-
-    .. mermaid::
-
-        classDiagram
-            C0Solver ..> IntegratorFactory: use
-            C0Solver ..> TrackerFactory: use
-            IntegratorFactory --> Integrator: create
-            TrackerFactory --> Tracker: create
+        The default is :class:`doubleton`.
     """
 
     __slots__ = ("integrator", "tracker")
@@ -287,7 +275,7 @@ class C0Solver:
                 except AbortSolving as exc:
                     return SolverResult("ABORTED", None, exc.message)
 
-        sol = OdeSolution(ts, series)
+        sol = ODESolution(ts, series)
         content = C0SolverResultContent(itor.t, itor.y, sol)
         return SolverResult("SUCCESS", content, "success")
 
@@ -310,7 +298,7 @@ class C1SolverResultContent[T: ComparableScalar]:
 
     t: Interval[T]
     y: tuple[Interval[T], ...]
-    sol: OdeSolution[T]
+    sol: ODESolution[T]
     jac: IntervalMatrix[T]
 
 
@@ -350,7 +338,7 @@ class C1Solver:
     integrator : IntegratorFactory | Callable[[], IntegratorFactory], optional
         The default is :class:`kashi`.
     tracker : TrackerFactory | Callable[[], TrackerFactory], optional
-        The default is :class:`doubletontracker`.
+        The default is :class:`doubleton`.
     vareq : VarEqSolverFactory | Callable[[], VarEqSolverFactory], optional
         The default is :class:`lognorm`.
 
@@ -520,6 +508,6 @@ class C1Solver:
                 except AbortSolving as exc:
                     return SolverResult("ABORTED", None, exc.message)
 
-        sol = OdeSolution(ts, series)
+        sol = ODESolution(ts, series)
         content = C1SolverResultContent(itor.t, itor.y, sol, totjac)
         return SolverResult("SUCCESS", content, "success")
