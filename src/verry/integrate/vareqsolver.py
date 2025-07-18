@@ -152,7 +152,7 @@ class lognorm(VarEqSolverFactory):
     Parameters
     ----------
     order : int | None, default=None
-        The order of
+        The order of Taylor polynomials to enclose a solution of variational equations.
     """
 
     __slots__ = ("order",)

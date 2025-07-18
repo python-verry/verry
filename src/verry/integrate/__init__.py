@@ -75,7 +75,7 @@ Miscellaneous
     C0SolverResultContent
     C1SolverCallbackArg
     C1SolverResultContent
-    OdeSolution
+    ODESolution
     SolverResult
     seriessol
     variationaleq
@@ -92,7 +92,7 @@ from .solver import (
     C1Solver,
     C1SolverCallbackArg,
     C1SolverResultContent,
-    OdeSolution,
+    ODESolution,
     SolverResult,
 )
 from .tracker import (
@@ -120,7 +120,7 @@ __all__ = [
     "C1Solver",
     "C1SolverCallbackArg",
     "C1SolverResultContent",
-    "OdeSolution",
+    "ODESolution",
     "SolverResult",
     "Tracker",
     "TrackerFactory",

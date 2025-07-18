@@ -156,7 +156,7 @@ class _AffineTracker[T: IntervalMatrix](Tracker[T]):
 
 
 class direct[T: IntervalMatrix](TrackerFactory[T]):
-    """Factory for creating the most obvious tracker."""
+    """Factory for creating the most obvious :class:`Tracker`."""
 
     __slots__ = ()
 
