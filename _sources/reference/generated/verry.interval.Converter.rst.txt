@@ -1,0 +1,11 @@
+﻿verry.interval.Converter
+========================
+
+.. currentmodule:: verry.interval
+
+.. autoclass:: Converter
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

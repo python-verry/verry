@@ -1,0 +1,11 @@
+﻿verry.optimize.AllRootResult
+============================
+
+.. currentmodule:: verry.optimize
+
+.. autoclass:: AllRootResult
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

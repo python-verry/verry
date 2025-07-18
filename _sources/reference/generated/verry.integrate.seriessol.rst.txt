@@ -1,0 +1,6 @@
+﻿verry.integrate.seriessol
+=========================
+
+.. currentmodule:: verry.integrate
+
+.. autofunction:: seriessol

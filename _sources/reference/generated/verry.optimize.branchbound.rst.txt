@@ -1,0 +1,6 @@
+﻿verry.optimize.branchbound
+==========================
+
+.. currentmodule:: verry.optimize
+
+.. autofunction:: branchbound

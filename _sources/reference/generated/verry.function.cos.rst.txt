@@ -1,0 +1,6 @@
+﻿verry.function.cos
+==================
+
+.. currentmodule:: verry.function
+
+.. autofunction:: cos

@@ -1,0 +1,6 @@
+﻿verry.integrate.variationaleq
+=============================
+
+.. currentmodule:: verry.integrate
+
+.. autofunction:: variationaleq

@@ -1,0 +1,11 @@
+﻿verry.integrate.doubleton
+=========================
+
+.. currentmodule:: verry.integrate
+
+.. autoclass:: doubleton
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise
