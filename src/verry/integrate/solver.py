@@ -1,7 +1,7 @@
 import dataclasses
 import itertools
 from collections.abc import Callable, Sequence
-from typing import Literal, cast
+from typing import Literal
 
 from verry.integrate.integrator import IntegratorFactory, kashi
 from verry.integrate.tracker import TrackerFactory, doubleton
@@ -67,7 +67,12 @@ class ODESolution[T: ComparableScalar]:
         self.series = list(series)
 
     def __call__(self, arg: Interval[T] | T | float | int) -> tuple[Interval[T], ...]:
-        """Return the value that the solution takes in `arg`."""
+        """Return the value that the solution takes in `arg`.
+
+        Returns
+        -------
+        tuple[Interval, ...]
+        """
         if isinstance(arg, str):
             raise TypeError
 
@@ -101,7 +106,7 @@ class C0SolverResultContent[T: ComparableScalar]:
         Boundary time passed to :meth:`C0Solver.solve`.
     y : tuple[Interval, ...], length n
         The value of ``sol(t)``.
-    sol : OdeSolution
+    sol : ODESolution
         Solution of ODEs.
     """
 
@@ -245,11 +250,11 @@ class C0Solver:
         tracker = self.tracker.create(y0)
         itor = self.integrator.create(fun, t0, tracker.hull(), t_bound)
 
-        while itor.status == "RUNNING":
+        while itor.is_active():
             if not (res := itor.step())[0]:
                 return SolverResult("FAILURE", None, res[1])
 
-            u0 = cast(Interval[T], itor.t_prev)
+            u0 = itor.t_prev
             u1 = itor.t
             varfun = variationaleq(fun, lambda t: tuple(x(t - u0) for x in itor.series))
             tmp = seriessol(fun, u0, tracker.sample(), itor.order - 1)
@@ -290,7 +295,7 @@ class C1SolverResultContent[T: ComparableScalar]:
         Boundary time passed to :meth:`C1Solver.solve`.
     y : tuple[Interval, ...], length n
         The value of ``sol(t)``.
-    sol : OdeSolution
+    sol : ODESolution
         Solution of ODEs.
     jac : IntervalMatrix, shape (n, n)
         Jacobian matrix of flow with respect to initial values.
@@ -472,14 +477,14 @@ class C1Solver:
         itor = self.integrator.create(fun, t0, tracker.hull(), t_bound)
         vareq = self.vareq.create(self.integrator, intvlmat)
 
-        while miditor.status == "RUNNING" and itor.status == "RUNNING":
+        while miditor.is_active() and itor.is_active():
             if not (res := miditor.step())[0]:
                 return SolverResult("FAILURE", None, res[1])
 
             if not (res := itor.step())[0]:
                 return SolverResult("FAILURE", None, res[1])
 
-            u0 = cast(Interval[T], itor.t_prev)
+            u0 = itor.t_prev
             u1 = t_bound
 
             if miditor.status == "RUNNING" or itor.status == "RUNNING":

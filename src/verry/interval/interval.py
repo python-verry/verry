@@ -22,7 +22,7 @@ class RoundingMode(enum.Enum):
     ROUND_FLOOR = enum.auto()
 
     def __repr__(self):
-        return f"<{self.__class__.__name__}.{self.name}>"
+        return f"<{type(self).__name__}.{self.name}>"
 
 
 ROUND_CEILING: Final = RoundingMode.ROUND_CEILING
