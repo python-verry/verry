@@ -18,7 +18,7 @@ class Integrator[T: ComparableScalar](ABC):
 
     Attributes
     ----------
-    status : Literal["FAILURE", "RUNNING", "SUCCESS"]
+    status : Literal["FAILURE", "RUNNING", "SUCCESS", "WAITING"]
         Current status of the integrator.
     t : Interval
         Current time.
@@ -71,11 +71,15 @@ class Integrator[T: ComparableScalar](ABC):
     __slots__ = ()
     order: int
     series: tuple[IntervalSeries[T], ...]
-    status: Literal["FAILURE", "RUNNING", "SUCCESS"]
+    status: Literal["FAILURE", "RUNNING", "SUCCESS", "WAITING"]
     t: Interval[T]
     t_bound: Interval[T]
     t_prev: Interval[T]
     y: tuple[Interval[T], ...]
+
+    def is_active(self) -> bool:
+        """Return ``True`` if and only if `status` is `"RUNNING"` or `"WAITING"`"""
+        return self.status == "RUNNING" or self.status == "WAITING"
 
     @abstractmethod
     def step(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
@@ -88,6 +92,11 @@ class Integrator[T: ComparableScalar](ABC):
         r1 : str | None
             `r1` is ``None`` If `r0` is ``True``; otherwise, `r1` describes the reason
             for failure.
+
+        Raises
+        ------
+        RuntimeError
+            If `status` is `"RUNNING"` or `"WAITING"`.
         """
         raise NotImplementedError
 
@@ -106,7 +115,7 @@ class Integrator[T: ComparableScalar](ABC):
 
         Raises
         ------
-        ValueError
+        RuntimeError
             If `status` is ``"FAILURE"``.
         """
         raise NotImplementedError
@@ -278,7 +287,7 @@ class _EiLoIntegrator[T: ComparableScalar](Integrator[T]):
         if t0.sup >= t_bound.inf:
             raise ValueError
 
-        self.status = "RUNNING"
+        self.status = "WAITING"
         self.t = t0
         self.y = tuple(y0)
         self.t_bound = t_bound
@@ -330,6 +339,9 @@ class _EiLoIntegrator[T: ComparableScalar](Integrator[T]):
             raise ValueError
 
     def step(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+        if not self.is_active():
+            raise RuntimeError
+
         ZERO = self.t.operator.ZERO
         intvl = type(self.t)
         cadd = self.t.operator.cadd
@@ -344,7 +356,7 @@ class _EiLoIntegrator[T: ComparableScalar](Integrator[T]):
         if tmp != ZERO:
             tol = self._atol + self._rtol * max(abs(x.mid()) for x in self.y)
             stepsize = vrf.pow(tol, 1 / self.order) / tmp
-        elif self.t_prev is not None:
+        elif self.status != "WAITING":
             stepsize = self.t.mid() - self.t_prev.mid()
         else:
             stepsize = csub(self.t_bound.sup, self.t.inf)
@@ -359,6 +371,8 @@ class _EiLoIntegrator[T: ComparableScalar](Integrator[T]):
         is_verified = False
 
         for _ in range(self._max_tries):
+            self.status = "RUNNING"
+
             if t_next.sup >= self.t_bound.inf:
                 self.status = "SUCCESS"
                 t_next = self.t_bound
@@ -384,7 +398,6 @@ class _EiLoIntegrator[T: ComparableScalar](Integrator[T]):
                 self.status = "FAILURE"
                 return (False, "failed to determine a step size")
 
-            self.status = "RUNNING"
             stepsize = max(stepsize / 2, self._min_step)
 
             if stepsize == ZERO:
@@ -532,7 +545,7 @@ class _KashiIntegrator[T: ComparableScalar](Integrator[T]):
         if t0.sup >= t_bound.inf:
             raise ValueError
 
-        self.status = "RUNNING"
+        self.status = "WAITING"
         self.t = t0
         self.y = tuple(y0)
         self.t_bound = t_bound
@@ -584,6 +597,9 @@ class _KashiIntegrator[T: ComparableScalar](Integrator[T]):
             raise ValueError
 
     def step(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+        if not self.is_active():
+            raise RuntimeError
+
         ZERO = self.t.operator.ZERO
         intvl = type(self.t)
         cadd = self.t.operator.cadd
@@ -598,7 +614,7 @@ class _KashiIntegrator[T: ComparableScalar](Integrator[T]):
         if tmp != ZERO:
             tol = self._atol + self._rtol * max(abs(x.mid()) for x in self.y)
             stepsize = vrf.pow(tol, 1 / self.order) / tmp
-        elif self.t_prev is not None:
+        elif self.status != "WAITING":
             stepsize = self.t.mid() - self.t_prev.mid()
         else:
             stepsize = csub(self.t_bound.sup, self.t.inf)
@@ -651,6 +667,8 @@ class _KashiIntegrator[T: ComparableScalar](Integrator[T]):
             t_next = intvl(cadd(self.t.sup, stepsize))
 
             for _ in range(self._max_tries):
+                self.status = "RUNNING"
+
                 if t_next.sup >= self.t_bound.inf:
                     self.status = "SUCCESS"
                     t_next = self.t_bound
@@ -673,7 +691,6 @@ class _KashiIntegrator[T: ComparableScalar](Integrator[T]):
                     self.status = "FAILURE"
                     return (False, "failed to determine a step size")
 
-                self.status = "RUNNING"
                 stepsize = max(stepsize / 2, self._min_step)
 
                 if stepsize == ZERO:

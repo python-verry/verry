@@ -10,8 +10,8 @@ from verry.linalg.intervalmatrix import IntervalMatrix, approx_norm, approx_qr, 
 class Tracker[T: IntervalMatrix](ABC):
     """Abstract base class for trackers.
 
-    Each instance of :class:`Tracker` corresponds to a pair of a point and some closed
-    convex set containing that point.
+    Each instance of this class corresponds to a pair of a closed star set and its
+    center.
 
     This class is usually not instantiated directly, but is created by
     :class:`TrackerFactory`.
@@ -31,7 +31,7 @@ class Tracker[T: IntervalMatrix](ABC):
 
     @abstractmethod
     def sample(self) -> T:
-        """Return the current point.
+        """Return an interval vector containing the center.
 
         Returns
         -------
@@ -46,20 +46,19 @@ class Tracker[T: IntervalMatrix](ABC):
         Parameters
         ----------
         a : IntervalMatrix, shape (n, n)
-            The image of :meth:`hull` mapped by :math:`Df(x)`.
+            The image of :meth:`hull` mapped by :math:`DF(x)`.
         b : IntervalMatrix, shape (n,)
-            The value obtained by mapping :meth:`sample` with :math:`f(x)`.
+            The value obtained by mapping :meth:`sample` with :math:`F(x)`.
 
         Notes
         -----
-        This method updates a pair :math:`(\hat{c},C)\to(\hat{c}',C')` with the
-        following rule:
+        This method updates a pair :math:`(c,S)\to(c',S')` with the following rule:
 
         .. math::
 
-            C' \supseteq \{A(x-\hat{c})+b\mid A\in[A],\,b\in[b],\,x\in C\}.
+            S' \supseteq \{A(x-c)+b\mid\text{$A\in[A]$, $b\in[b]$, and $x\in S$}\}.
 
-        Note that :math:`C'\supseteq f(C)` holds by the mean value theorem.
+        Note that :math:`S'\supseteq F(S)` holds by the mean value theorem.
         """
         raise NotImplementedError
 
@@ -185,12 +184,12 @@ class _DirectTracker[T: IntervalMatrix](Tracker[T]):
 class qr[T: IntervalMatrix](TrackerFactory[T]):
     """Factory for creating :class:`Tracker` using a QR decomposition.
 
-    This is an implementation of Evaluation 3 in [#Lo87]_, known as a Lohner's QR
-    method.
+    This is an implementation of Evaluation 3 in [#Loh87]_, known as a Lohner's QR
+    algorithm.
 
     References
     ----------
-    .. [#Lo87] R. J. Lohner, "Enclosing the Solutions of Ordinary Initial and Boundary
+    .. [#Loh87] R. J. Lohner, "Enclosing the Solutions of Ordinary Initial and Boundary
         Value Problem," in *Computerarithmetic*, E. Kaucher, U. Kulisch, and Ch.
         Ullrich, Eds. Stuttgart, Germany: B. G. Teubner, 1987, pp. 225--286.
     """
@@ -200,24 +199,24 @@ class qr[T: IntervalMatrix](TrackerFactory[T]):
 
 
 class _QRTracker[T: IntervalMatrix](Tracker[T]):
-    __slots__ = ("_b", "_m", "_r")
-    _b: T
-    _m: npt.NDArray
+    __slots__ = ("_c", "_q", "_r")
+    _c: npt.NDArray
+    _q: T
     _r: T
 
     def __init__(self, x0: T):
-        self._b = x0.eye(len(x0))
-        self._m = x0.mid()
-        self._r = x0 - self._m
+        self._c = x0.mid()
+        self._q = x0.eye(len(x0))
+        self._r = x0 - self._c
 
     def hull(self) -> T:
-        return self._b @ self._r + self._m
+        return self._c + self._q @ self._r
 
     def sample(self) -> T:
-        return self._b.__class__(self._m)
+        return self._q.__class__(self._c)
 
     def update(self, a: T, b: T) -> None:
-        q0 = self._b
+        q0 = self._q
         tmp = a @ q0
 
         n = len(b)
@@ -228,10 +227,10 @@ class _QRTracker[T: IntervalMatrix](Tracker[T]):
         tmp = a.__class__(inf, sup) @ q0
 
         q1 = q0.__class__(approx_qr(tmp)[0])
-        p1 = inv(q1, q1.mid().T)
-        self._b = q1
-        self._m = b.mid()
-        self._r = (p1 @ a @ q0) @ self._r + p1 @ (b - self._m)
+        p1 = inv(q1, r=q1.mid().T)
+        self._q = q1
+        self._c = b.mid()
+        self._r = (p1 @ a @ q0) @ self._r + p1 @ (b - self._c)
 
 
 class doubleton[T: IntervalMatrix](TrackerFactory[T]):
@@ -275,28 +274,37 @@ class doubleton[T: IntervalMatrix](TrackerFactory[T]):
 
 
 class _DoubletonTracker[T: IntervalMatrix](Tracker[T]):
-    __slots__ = ("_c", "_m", "_r0", "_tracker")
-    _c: T
-    _m: npt.NDArray
-    _r0: T
+    __slots__ = ("_b", "_c", "_r", "_tracker")
+    _b: npt.NDArray
+    _c: npt.NDArray
+    _r: T
     _tracker: Tracker[T]
 
     def __init__(self, x0: T, factory: TrackerFactory[T]):
-        self._c = x0.eye(len(x0))
-        self._m = x0.mid()
-        self._r0 = x0 - self._m
+        ZERO = x0.interval.operator.ZERO
+        ONE = x0.interval.operator.ONE
+        n = len(x0)
+        eye = x0._emptyarray((n, n))
+
+        for i in range(n):
+            for j in range(n):
+                eye[i, j] = ONE if i == j else ZERO
+
+        self._b = eye
+        self._c = x0.mid()
+        self._r = x0 - self._c
         self._tracker = factory.create(x0.zeros_like())
 
     def hull(self) -> T:
-        return self._m + self._tracker.hull() + self._c @ self._r0
+        return self._c + self._tracker.hull() + self._b @ self._r
 
-    def sample(self):
-        return self._c.__class__(self._m)
+    def sample(self) -> T:
+        return self._c + self._tracker.sample()
 
     def update(self, a: T, b: T) -> None:
-        c0 = self._c
-        c1 = a.mid() @ c0.inf
-        self._c = c0.__class__(c1)
-        self._m = b.mid()
-        tmp = b - self._m + (a @ c0 - c1) @ self._r0 + a @ self._tracker.sample()
-        self._tracker.update(a, tmp)
+        b0 = self._b
+        b1 = a.mid() @ self._b
+        c1 = b.mid()
+        self._b = b1
+        self._c = c1
+        self._tracker.update(a, b - c1 + (a @ b0 - b1) @ self._r)
