@@ -78,7 +78,7 @@ class Integrator[T: ComparableScalar](ABC):
     y: tuple[Interval[T], ...]
 
     def is_active(self) -> bool:
-        """Return ``True`` if and only if `status` is `"RUNNING"` or `"WAITING"`"""
+        """Return ``True`` if and only if `status` is ``"RUNNING"`` or ``"WAITING"``."""
         return self.status == "RUNNING" or self.status == "WAITING"
 
     @abstractmethod
@@ -96,27 +96,29 @@ class Integrator[T: ComparableScalar](ABC):
         Raises
         ------
         RuntimeError
-            If `status` is `"RUNNING"` or `"WAITING"`.
+            If `status` is ``"FAILURE"`` or ``"SUCCESS"``.
         """
         raise NotImplementedError
 
     @abstractmethod
     def update(
-        self, t: Interval[T], y: IntervalMatrix[T] | Sequence[Interval[T]]
+        self, t_next: Interval[T], y_next: IntervalMatrix[T] | Sequence[Interval[T]]
     ) -> None:
         """Receive a state, usually refined by :class:`Tracker`.
 
-        ``self.t`` and ``self.y`` are updated to `t` and `y`.
+        `t` and `y` are updated to `t_next` and `y_next`.
 
         Parameters
         ----------
-        t : Interval
-        y : IntervalMatrix | Sequence[Interval]
+        t_next : Interval
+        y_next : IntervalMatrix | Sequence[Interval]
 
         Raises
         ------
+        ValueError
+            If `t_next` is not included in ``t_prev | t``.
         RuntimeError
-            If `status` is ``"FAILURE"``.
+            If `status` is neither ``"RUNNING"`` nor ``"SUCCESS"``.
         """
         raise NotImplementedError
 
@@ -424,8 +426,11 @@ class _EiLoIntegrator[T: ComparableScalar](Integrator[T]):
     def update(
         self, t: Interval[T], y: IntervalMatrix[T] | Sequence[Interval[T]]
     ) -> None:
-        if self.status == "FAILURE":
+        if not (self.status == "RUNNING" or self.status == "SUCCESS"):
             raise RuntimeError
+
+        if not t.issubset(self.t_prev | self.t):
+            raise ValueError
 
         if t != self.t_bound:
             self.status = "RUNNING"
@@ -705,8 +710,11 @@ class _KashiIntegrator[T: ComparableScalar](Integrator[T]):
     def update(
         self, t: Interval[T], y: IntervalMatrix[T] | Sequence[Interval[T]]
     ) -> None:
-        if self.status == "FAILURE":
+        if not (self.status == "RUNNING" or self.status == "SUCCESS"):
             raise RuntimeError
+
+        if not t.issubset(self.t_prev | self.t):
+            raise ValueError
 
         if t != self.t_bound:
             self.status = "RUNNING"

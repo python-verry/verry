@@ -33,7 +33,7 @@ Context
 import contextlib
 import contextvars
 from collections.abc import Sequence
-from typing import Literal, Never, Self
+from typing import Literal, Never, Self, final
 
 from verry import function as vrf
 from verry.interval.interval import Interval
@@ -122,6 +122,7 @@ def localcontext(
         _var.reset(token)
 
 
+@final
 class AffineForm[T: ComparableScalar](Scalar):
     """Affine form.
 

@@ -52,7 +52,7 @@ class Tracker[T: IntervalMatrix](ABC):
 
         Notes
         -----
-        This method updates a pair :math:`(c,S)\to(c',S')` with the following rule:
+        This method updates a pair :math:`(S,c)\to(S',c')` with the following rule:
 
         .. math::
 
@@ -244,7 +244,7 @@ class doubleton[T: IntervalMatrix](TrackerFactory[T]):
     Parameters
     ----------
     tracker : TrackerFactory | Callable[[], TrackerFactory], optional
-        The default is :class:`qrtracker`.
+        The default is :class:`qr`.
 
     References
     ----------

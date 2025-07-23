@@ -21,6 +21,7 @@ class VarEqSolver(ABC):
     Attributes
     ----------
     t : Interval
+        Current time.
     jac : IntervalMatrix
         The value that the solution of variational equations takes at `t`.
 
@@ -47,7 +48,7 @@ class VarEqSolver(ABC):
         Parameters
         ----------
         fun : Callable
-            Right-hand side of the system. The calling signature is ``fun(t, *y)``.
+            Right-hand side of the system.
         t0 : Interval
             Current time.
         t1 : Interval
@@ -65,7 +66,8 @@ class VarEqSolver(ABC):
 
         Notes
         -----
-        `t` can be smaller than `t1` even if `r0` is ``True``.
+        The updated `t` might not be equal to `t1` even if `r0` is ``True``.
+        The only assumption that can be made is that `t` is included in ``t0 | t1``.
         """
         raise NotImplementedError
 

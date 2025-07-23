@@ -75,7 +75,6 @@ Miscellaneous
     C0SolverResultContent
     C1SolverCallbackArg
     C1SolverResultContent
-    InactiveError
     ODESolution
     SolverResult
     seriessol

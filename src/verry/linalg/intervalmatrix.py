@@ -51,7 +51,7 @@ class matiter(Iterator):
 _intervalmatrices: list[type["IntervalMatrix"]] = []
 
 
-def resolve_intervalmatrix[T: ComparableScalar](
+def _resolve_intervalmatrix[T: ComparableScalar](
     intvl: type[Interval[T]],
 ) -> type["IntervalMatrix[T]"]:
     """Return a type of interval matrix whose components are of type `intvl`.
