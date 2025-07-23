@@ -9,7 +9,7 @@ from verry.integrate.utility import seriessol, variationaleq
 from verry.integrate.vareqsolver import VarEqSolverFactory, lognorm
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries
-from verry.linalg.intervalmatrix import IntervalMatrix, resolve_intervalmatrix
+from verry.linalg.intervalmatrix import IntervalMatrix, _resolve_intervalmatrix
 from verry.typing import ComparableScalar
 
 
@@ -239,7 +239,7 @@ class C0Solver:
             raise TypeError
 
         if not isinstance(y0, IntervalMatrix):
-            y0 = resolve_intervalmatrix(type(t0))(y0)
+            y0 = _resolve_intervalmatrix(type(t0))(y0)
 
         intvlmat = type(y0)
         eye = intvlmat.eye(len(y0))
@@ -464,7 +464,7 @@ class C1Solver:
             raise TypeError
 
         if not isinstance(y0, IntervalMatrix):
-            y0 = resolve_intervalmatrix(type(t0))(y0)
+            y0 = _resolve_intervalmatrix(type(t0))(y0)
 
         intvl = type(t0)
         intvlmat = type(y0)

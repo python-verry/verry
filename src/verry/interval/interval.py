@@ -175,21 +175,21 @@ class Interval[T: ComparableScalar](Scalar, ABC):
         Infimum of the interval.
     sup : endtype
         Supremum of the interval.
+    endtype : type
+        Type of endpoints.
     converter : Converter
-    endtype : type[endtype]
     operator : Operator
 
     Notes
     -----
-    Classes that inherit from this must define class constants `converter`, `operator`,
-    and `endtype`, where `endtype` is a type of endpoints.
+    `endtype`, `converter`, and `operator` must be class constants.
     """
 
     __slots__ = ("inf", "sup")
     inf: T
     sup: T
-    converter: Converter[T]
     endtype: type[T]
+    converter: Converter[T]
     operator: Operator[T]
 
     def __init__(
