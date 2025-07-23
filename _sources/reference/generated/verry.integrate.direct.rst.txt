@@ -1,0 +1,11 @@
+﻿verry.integrate.direct
+======================
+
+.. currentmodule:: verry.integrate
+
+.. autoclass:: direct
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

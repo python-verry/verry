@@ -1,0 +1,11 @@
+﻿verry.integrate.brute
+=====================
+
+.. currentmodule:: verry.integrate
+
+.. autoclass:: brute
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

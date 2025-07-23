@@ -1,0 +1,11 @@
+﻿verry.integrate.lognorm
+=======================
+
+.. currentmodule:: verry.integrate
+
+.. autoclass:: lognorm
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

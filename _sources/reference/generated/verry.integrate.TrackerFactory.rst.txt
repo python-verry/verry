@@ -1,0 +1,11 @@
+﻿verry.integrate.TrackerFactory
+==============================
+
+.. currentmodule:: verry.integrate
+
+.. autoclass:: TrackerFactory
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

@@ -1,0 +1,11 @@
+﻿verry.intervalseries.Context
+============================
+
+.. currentmodule:: verry.intervalseries
+
+.. autoclass:: Context
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

@@ -1,0 +1,6 @@
+﻿verry.integrate.cumulative\_simpson
+===================================
+
+.. currentmodule:: verry.integrate
+
+.. autofunction:: cumulative_simpson
