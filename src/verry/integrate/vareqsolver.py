@@ -7,7 +7,7 @@ from verry.autodiff.autodiff import jacobian
 from verry.integrate.integrator import IntegratorFactory
 from verry.integrate.utility import seriessol, variationaleq
 from verry.interval.interval import Interval
-from verry.intervalseries import IntervalSeries, localcontext
+from verry.intervalseries import IntervalSeries
 from verry.linalg.intervalmatrix import IntervalMatrix
 from verry.typing import ComparableScalar
 
@@ -138,10 +138,8 @@ class _BruteVarEqSolver(VarEqSolver):
         jac = self._intvlmat.empty((n, n))
 
         for j in range(n):
-            tmp = varitors[j].series
-
             for i in range(n):
-                jac[i, j] = tmp[i].eval(t1 - t0)
+                jac[i, j] = varitors[j].series[i].eval(t1 - t0)
 
         self.t = t1
         self.jac = jac
@@ -149,31 +147,17 @@ class _BruteVarEqSolver(VarEqSolver):
 
 
 class lognorm(VarEqSolverFactory):
-    """Factory for creating :class:`VarEqSolver` that uses a logarithmic norm.
-
-    Parameters
-    ----------
-    order : int | None, default=None
-        The order of Taylor polynomials to enclose a solution of variational equations.
-    """
-
-    __slots__ = ("order",)
-    order: int | None
-
-    def __init__(self, order: int | None = None):
-        self.order = order
+    """Factory for creating :class:`VarEqSolver` that uses a logarithmic norm."""
 
     def create(self, integrator, intvlmat):
-        return _LogNormVarEqSolver(self.order, intvlmat)
+        return _LogNormVarEqSolver(intvlmat)
 
 
 class _LogNormVarEqSolver(VarEqSolver):
-    __slots__ = ("t", "jac", "_intvlmat", "_order")
+    __slots__ = ("t", "jac", "_intvlmat")
     _intvlmat: type[IntervalMatrix]
-    _order: int | None
 
-    def __init__(self, order: int | None, intvlmat: type[IntervalMatrix]):
-        self._order = order
+    def __init__(self, intvlmat: type[IntervalMatrix]):
         self._intvlmat = intvlmat
 
     def solve[T: ComparableScalar](
@@ -187,37 +171,37 @@ class _LogNormVarEqSolver(VarEqSolver):
             return jacobian(lambda *y: fun(t, *y))(*y)
 
         intvl = self._intvlmat.interval
-        domain = intvl(0, (t1 - t0).sup)
+        dom = (t1 - t0) | 0
         deg = len(series[0].coeffs) - 1
         n = len(series)
 
-        with localcontext(rounding="TYPE2", deg=deg, domain=domain):
-            t = IntervalSeries([t0, 1], intvl=intvl)
-            tmp0 = dfun(t, *series)
-            v = self._intvlmat.empty((n, n))
+        t = IntervalSeries(dom, (t0, intvl(1), *[intvl()] * (deg - 1)))
+        tmp0 = dfun(t, *series)
+        v = self._intvlmat.empty((n, n))
 
-            for i in range(n):
-                for j in range(n):
-                    v[i, j] = tmp0[i][j].eval(domain)
+        for i in range(n):
+            for j in range(n):
+                v[i, j] = tmp0[i][j].eval(dom)
 
         mu = v[0, 0] + sum(abs(v[0, j]) for j in range(1, n))
         mu = intvl(mu.sup)
 
         for i in range(1, n):
-            tmp1 = v[i, i] + sum(abs(v[i, j]) for j in range(n) if j != j)
+            tmp1 = v[i, i] + sum(abs(v[i, j]) for j in range(n) if i != j)
 
             if tmp1.sup > mu.sup:
                 mu = intvl(tmp1.sup)
 
-        u0 = [vrf.exp(mu * domain) * intvl(-1, 1) for _ in range(n)]
-        varfun = variationaleq(fun, lambda t: tuple(x(t - t0) for x in series))
+        u0 = [vrf.exp(mu * dom) * intvl(-1, 1) for _ in range(n)]
+        vareq = variationaleq(fun, lambda t: tuple(x(t - t0) for x in series))
         jac = self._intvlmat.empty((n, n))
-        order = len(series[0].coeffs) - 1 if self._order is None else self._order
 
         for j in range(n):
             v0 = tuple(intvl(1 if j == j else 0) for j in range(n))
-            tmp2 = seriessol(varfun, t0, v0, order - 1)
-            tmp3 = seriessol(varfun, t0, u0, order)
+            tmp2 = seriessol(vareq, t0, v0, series[0].order - 1)
+            tmp3 = seriessol(vareq, t0, u0, series[0].order)
+            tmp2 = [IntervalSeries(dom, x.coeffs) for x in tmp2]
+            tmp3 = [IntervalSeries(dom, x.coeffs) for x in tmp3]
 
             for i in range(n):
                 tmp2[i].coeffs.append(tmp3[i].coeffs[-1])

@@ -5,7 +5,7 @@ from typing import Any, Literal, Self
 from verry import function as vrf
 from verry.integrate.utility import seriessol
 from verry.interval.interval import Interval
-from verry.intervalseries import IntervalSeries, localcontext
+from verry.intervalseries import IntervalSeries
 from verry.linalg.intervalmatrix import IntervalMatrix
 from verry.typing import ComparableScalar
 
@@ -369,6 +369,7 @@ class _EiLoIntegrator[T: ComparableScalar](Integrator[T]):
             self.status = "FAILURE"
             return (False, "failed to determine a step size")
 
+        EPSILON = intvl(intvl.converter.fromfloat(0.1, False))
         t_next = intvl(cadd(self.t.sup, stepsize))
         is_verified = False
 
@@ -379,18 +380,17 @@ class _EiLoIntegrator[T: ComparableScalar](Integrator[T]):
                 self.status = "SUCCESS"
                 t_next = self.t_bound
 
-            h = intvl(0, csub(t_next.sup, self.t.inf))
-            t1 = self.t + h
-            a0 = [y0 + h * dy for y0, dy in zip(self.y, self._fun(t1, *self.y))]
+            dom = intvl(0, csub(t_next.sup, self.t.inf))
+            t1 = self.t + dom
+            a0 = [y0 + dom * dy for y0, dy in zip(self.y, self._fun(t1, *self.y))]
 
             for __ in range(5):
-                a1 = [y0 + h * dy for y0, dy in zip(self.y, self._fun(t1, *a0))]
+                a1 = [y0 + dom * dy for y0, dy in zip(self.y, self._fun(t1, *a0))]
 
                 if all(y.issubset(x) for x, y in zip(a0, a1)):
                     is_verified = True
                     break
 
-                EPSILON = intvl("0.1")
                 a0 = [(1 + EPSILON) * x - EPSILON * x for x in a1]
 
             if is_verified:
@@ -412,15 +412,16 @@ class _EiLoIntegrator[T: ComparableScalar](Integrator[T]):
             self.status = "FAILURE"
             return (False, f"failed to verify within {self._max_tries} trials")
 
+        series = [IntervalSeries(dom, x.coeffs) for x in p0]
         p1 = seriessol(self._fun, self.t, a1, self.order)
 
         for i in range(len(p0)):
-            p0[i].coeffs[-1] = p1[i].coeffs[-1]
+            series[i].coeffs[-1] = p1[i].coeffs[-1]
 
         self.t_prev = self.t
         self.t = t_next
-        self.y = tuple(x.eval(self.t - self.t_prev) for x in p0)
-        self.series = tuple(p0)
+        self.y = tuple(x.eval(self.t - self.t_prev) for x in series)
+        self.series = tuple(series)
         return (True, None)
 
     def update(
@@ -562,8 +563,8 @@ class _KashiIntegrator[T: ComparableScalar](Integrator[T]):
             case t0.endtype():
                 self._rtol = rtol
 
-            case float() | int():
-                self._rtol = t0.converter.fromfloat(float(rtol), strict=False)
+            case int() | float():
+                self._rtol = t0.converter.fromfloat(float(rtol), False)
 
             case _:
                 raise TypeError
@@ -572,8 +573,8 @@ class _KashiIntegrator[T: ComparableScalar](Integrator[T]):
             case t0.endtype():
                 self._atol = atol
 
-            case float() | int():
-                self._atol = t0.converter.fromfloat(float(atol), strict=False)
+            case int() | float():
+                self._atol = t0.converter.fromfloat(float(atol), False)
 
             case _:
                 raise TypeError
@@ -635,74 +636,72 @@ class _KashiIntegrator[T: ComparableScalar](Integrator[T]):
         if t_next.sup >= self.t_bound.inf:
             t_next = self.t_bound
 
-        with localcontext() as ctx:
-            ctx.rounding = "TYPE2"
-            ctx.deg = self.order
-            ctx.domain = intvl(0, csub(t_next.sup, self.t.inf))
+        dom = intvl(0, csub(t_next.sup, self.t.inf))
+        t = IntervalSeries(dom, (self.t, intvl(1), *[intvl()] * (self.order - 1)))
+        p0 = [IntervalSeries(dom, x.coeffs) for x in p0]
+        p2 = [y0 + dy.integrate() for y0, dy in zip(self.y, self._fun(t, *p0))]
 
-            t = IntervalSeries([self.t, 1], intvl=intvl)
-            p2 = [y0 + dy.integrate() for y0, dy in zip(self.y, self._fun(t, *p0))]
+        for i in range(len(p2)):
+            p2[i] = p2[i].round(self.order)
 
-            for i in range(len(p2)):
-                ctx.round(p2[i])
+        rad = max((x.coeffs[-1] - y.coeffs[-1]).mag() for x, y in zip(p0, p2))
+        p1 = [x.copy() for x in p0]
+        del p0
 
-            rad = max((x.coeffs[-1] - y.coeffs[-1]).mag() for x, y in zip(p0, p2))
-            p1 = [x.copy() for x in p0]
+        for i in range(len(p1)):
+            p1[i].coeffs[-1] += rad * intvl(-2, 2)
 
-            for i in range(len(p1)):
-                p1[i].coeffs[-1] += rad * intvl(-2, 2)
+        p2 = [y0 + dy.integrate() for y0, dy in zip(self.y, self._fun(t, *p1))]
 
+        for i in range(len(p2)):
+            p2[i] = p2[i].round(self.order)
+
+        tmp = [x.eval(stepsize) for x in p2]
+        e0 = self._atol + self._rtol * max(abs(x.mid()) for x in tmp)
+        e1 = max(x.diam() for x in tmp)
+
+        if e1 > ZERO:
+            stepsize *= vrf.pow(e0 / e1, 1 / self.order)
+            stepsize = min(max(stepsize, self._min_step), self._max_step)
+
+            if stepsize == ZERO:
+                self.status = "FAILURE"
+                return (False, "failed to determine a step size")
+
+        t_next = intvl(cadd(self.t.sup, stepsize))
+
+        for _ in range(self._max_tries):
+            self.status = "RUNNING"
+
+            if t_next.sup >= self.t_bound.inf:
+                self.status = "SUCCESS"
+                t_next = self.t_bound
+
+            dom = intvl(0, csub(t_next.sup, self.t.inf))
+            p1 = [IntervalSeries(dom, x.coeffs) for x in p1]
             p2 = [y0 + dy.integrate() for y0, dy in zip(self.y, self._fun(t, *p1))]
 
             for i in range(len(p2)):
-                ctx.round(p2[i])
+                p2[i] = p2[i].round(self.order)
 
-            tmp = [x.eval(stepsize) for x in p2]
-            e0 = self._atol + self._rtol * max(abs(x.mid()) for x in tmp)
-            e1 = max(x.diam() for x in tmp)
+            if all(y.coeffs[-1].issubset(x.coeffs[-1]) for x, y in zip(p1, p2)):
+                self.t_prev = self.t
+                self.t = t_next
+                self.y = tuple(x.eval(self.t - self.t_prev) for x in p2)
+                self.series = tuple(p2)
+                return (True, None)
 
-            if e1 > ZERO:
-                stepsize *= vrf.pow(e0 / e1, 1 / self.order)
-                stepsize = min(max(stepsize, self._min_step), self._max_step)
+            if stepsize == self._min_step:
+                self.status = "FAILURE"
+                return (False, "failed to determine a step size")
 
-                if stepsize == ZERO:
-                    self.status = "FAILURE"
-                    return (False, "failed to determine a step size")
+            stepsize = max(stepsize / 2, self._min_step)
+
+            if stepsize == ZERO:
+                self.status = "FAILURE"
+                return (False, "failed to determine a step size")
 
             t_next = intvl(cadd(self.t.sup, stepsize))
-
-            for _ in range(self._max_tries):
-                self.status = "RUNNING"
-
-                if t_next.sup >= self.t_bound.inf:
-                    self.status = "SUCCESS"
-                    t_next = self.t_bound
-
-                ctx.domain = intvl(0, csub(t_next.sup, self.t.inf))
-                t = IntervalSeries([self.t, 1], intvl=intvl)
-                p2 = [y0 + dy.integrate() for y0, dy in zip(self.y, self._fun(t, *p1))]
-
-                for i in range(len(p2)):
-                    ctx.round(p2[i])
-
-                if all(y.coeffs[-1].issubset(x.coeffs[-1]) for x, y in zip(p1, p2)):
-                    self.t_prev = self.t
-                    self.t = t_next
-                    self.y = tuple(x.eval(self.t - self.t_prev) for x in p2)
-                    self.series = tuple(p2)
-                    return (True, None)
-
-                if stepsize == self._min_step:
-                    self.status = "FAILURE"
-                    return (False, "failed to determine a step size")
-
-                stepsize = max(stepsize / 2, self._min_step)
-
-                if stepsize == ZERO:
-                    self.status = "FAILURE"
-                    return (False, "failed to determine a step size")
-
-                t_next = intvl(cadd(self.t.sup, stepsize))
 
         self.status = "FAILURE"
         return (False, f"failed to verify within {self._max_tries} trials")

@@ -104,9 +104,7 @@ def setcontext(ctx: Context) -> None:
 def localcontext(
     ctx: Context | None = None, *, rounding: Literal["FAST", "BRUTE"] | None = None
 ):
-    """Return a context manager that will set the current context for the active thread
-    to a copy of `ctx` on entry to the with-statement and restore the previous context
-    when exiting the with-statement."""
+    """Return a context manager."""
     if ctx is None:
         ctx = getcontext()
 
@@ -138,11 +136,11 @@ class AffineForm[T: ComparableScalar](Scalar):
     >>> x0 = FloatInterval("-0.1", "0.1")
     >>> y0 = (x0 + 1)**2 - 2 * x0
     >>> print(format(y0, ".6f"))
-    [0.609999, 1.410001]
+    [inf=0.609999, sup=1.410001]
     >>> x1 = AffineForm(x0)
     >>> y1 = (x1 + 1)**2 - 2 * x1
     >>> print(format(y1.range(), ".6f"))
-    [0.989999, 1.010001]
+    [inf=0.989999, sup=1.010001]
     """
 
     __slots__ = ("_mid", "_coeffs", "_excess", "_intvl", "_context")
@@ -583,11 +581,11 @@ def summarized[T: AffineForm](vars: Sequence[T], n: int, m: int = 0) -> tuple[T,
 
     Notes
     -----
-    This is an implementation of [#Ka12]_.
+    This is an implementation of [#Kas12]_.
 
     References
     ----------
-    .. [#Ka12] M. Kashiwagi, "An algorithm to reduce the number of dummy variables in
+    .. [#Kas12] M. Kashiwagi, "An algorithm to reduce the number of dummy variables in
         affine arithmetic," in *Proc. 15th GAMM-IMACS International Symposium on
         Scientific Computing Computer Arithmetic and Verified Numerical Computations
         (SCAN 2012)*, Novosibirsk, Russia, Sep. 23--29, 2012, pp. 70--71. [Online].

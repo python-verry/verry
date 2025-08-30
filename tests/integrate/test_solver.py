@@ -19,8 +19,6 @@ def test_a4detest():
     r = solver.solve(lambda _, x: (a * x * (20 - x),), FI(0), [FI(1)], t_bound)
     assert r.status == "SUCCESS"
     assert 2 in r.content.y[0]
-    # print(r.content.y[0])
-    # print(r.content.jac[0, 0].diam() / r.content.jac[0, 0].mid())
 
 
 def test_explosion():
@@ -34,4 +32,3 @@ def test_period():
     solver = C1Solver(vareq=brute)
     r = solver.solve(lambda t, x, y: (y, -x), FI(0), [FI(1), FI(0)], PI)
     assert r.status == "SUCCESS"
-    print(r.content.y[0])

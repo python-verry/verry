@@ -387,7 +387,7 @@ class Interval[T: ComparableScalar](Scalar, ABC):
         try:
             inf = self.converter.tostr(self.inf, ROUND_FLOOR)
             sup = self.converter.tostr(self.sup, ROUND_CEILING)
-            return f"[{inf}, {sup}]"
+            return f"[inf={inf}, sup={sup}]"
         except NotImplementedError:
             return self.__repr__()
 
@@ -402,7 +402,7 @@ class Interval[T: ComparableScalar](Scalar, ABC):
             raise ValueError
 
         spec = FormatSpec(fill=spec.fill, align=spec.align, width=spec.width)
-        return spec.format(f"[{inf}, {sup}]")
+        return spec.format(f"[inf={inf}, sup={sup}]")
 
     def __eq__(self, other) -> bool:
         if type(other) is not type(self):
