@@ -1,0 +1,6 @@
+﻿verry.linalg.LinAlgError
+========================
+
+.. currentmodule:: verry.linalg
+
+.. autoexception:: LinAlgError

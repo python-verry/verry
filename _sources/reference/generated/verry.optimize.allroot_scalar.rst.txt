@@ -1,0 +1,6 @@
+﻿verry.optimize.allroot\_scalar
+==============================
+
+.. currentmodule:: verry.optimize
+
+.. autofunction:: allroot_scalar

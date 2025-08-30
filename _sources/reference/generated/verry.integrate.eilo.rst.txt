@@ -1,0 +1,11 @@
+﻿verry.integrate.eilo
+====================
+
+.. currentmodule:: verry.integrate
+
+.. autoclass:: eilo
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

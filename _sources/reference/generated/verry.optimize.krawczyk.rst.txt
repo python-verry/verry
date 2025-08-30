@@ -1,0 +1,6 @@
+﻿verry.optimize.krawczyk
+=======================
+
+.. currentmodule:: verry.optimize
+
+.. autofunction:: krawczyk

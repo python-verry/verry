@@ -1,0 +1,6 @@
+﻿verry.integrate.cumulative\_trapezoid
+=====================================
+
+.. currentmodule:: verry.integrate
+
+.. autofunction:: cumulative_trapezoid

@@ -1,0 +1,6 @@
+﻿verry.linalg.approx\_qr
+=======================
+
+.. currentmodule:: verry.linalg
+
+.. autofunction:: approx_qr

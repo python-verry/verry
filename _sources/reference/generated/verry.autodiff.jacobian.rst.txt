@@ -1,0 +1,6 @@
+﻿verry.autodiff.jacobian
+=======================
+
+.. currentmodule:: verry.autodiff
+
+.. autofunction:: jacobian

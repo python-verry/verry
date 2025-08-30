@@ -1,0 +1,6 @@
+﻿verry.function.exp
+==================
+
+.. currentmodule:: verry.function
+
+.. autofunction:: exp

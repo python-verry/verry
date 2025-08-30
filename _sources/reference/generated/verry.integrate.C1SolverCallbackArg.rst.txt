@@ -1,0 +1,11 @@
+﻿verry.integrate.C1SolverCallbackArg
+===================================
+
+.. currentmodule:: verry.integrate
+
+.. autoclass:: C1SolverCallbackArg
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

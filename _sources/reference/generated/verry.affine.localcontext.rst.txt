@@ -1,0 +1,6 @@
+﻿verry.affine.localcontext
+=========================
+
+.. currentmodule:: verry.affine
+
+.. autofunction:: localcontext

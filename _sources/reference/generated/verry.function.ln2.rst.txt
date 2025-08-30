@@ -1,0 +1,6 @@
+﻿verry.function.ln2
+==================
+
+.. currentmodule:: verry.function
+
+.. autofunction:: ln2

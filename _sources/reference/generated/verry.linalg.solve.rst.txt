@@ -1,0 +1,6 @@
+﻿verry.linalg.solve
+==================
+
+.. currentmodule:: verry.linalg
+
+.. autofunction:: solve

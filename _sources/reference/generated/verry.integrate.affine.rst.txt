@@ -1,0 +1,11 @@
+﻿verry.integrate.affine
+======================
+
+.. currentmodule:: verry.integrate
+
+.. autoclass:: affine
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise
