@@ -7,167 +7,70 @@ Interval series (:mod:`verry.intervalseries`)
 
 This module provides operations on power series with interval coefficients.
 
-Interval series
-===============
-
-.. autosummary::
-    :toctree: generated/
-
-    IntervalSeries
-
-Context
-=======
-
-.. autosummary::
-    :toctree: generated/
-
-    Context
-    getcontext
-    localcontext
-    setcontext
+.. autoclass:: IntervalSeries
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise
 
 """
 
-import contextlib
-import contextvars
-from collections.abc import Sequence
-from typing import Literal, Self, overload
+from collections.abc import Iterable
+from typing import Self, overload
 
 from verry import function as vrf
+from verry.autodiff.dual import Jet, JetLike
 from verry.interval.interval import Interval
 from verry.typing import ComparableScalar, Scalar
 
 
-class Context[T: ComparableScalar]:
-    """Create a new context."""
-
-    __slots__ = ("rounding", "deg", "domain")
-    rounding: Literal["TYPE1", "TYPE2"]
-    deg: int
-    domain: Interval[T] | None
-
-    def __init__(
-        self,
-        rounding: Literal["TYPE1", "TYPE2"] = "TYPE1",
-        deg: int = 15,
-        domain: Interval[T] | None = None,
-    ):
-        self.rounding = rounding
-        self.deg = deg
-        self.domain = domain
-
-        if rounding == "TYPE2" and domain is None:
-            raise ValueError
-
-    def copy(self) -> Self:
-        return self.__class__(self.rounding, self.deg, self.domain)
-
-    def round(self, series: "IntervalSeries") -> None:
-        match self.rounding:
-            case "TYPE1":
-                series.round_type1(self.deg)
-
-            case "TYPE2":
-                if not isinstance(self.domain, series.interval):
-                    raise TypeError
-
-                series.round_type2(self.deg, self.domain)
-
-    def __repr__(self):
-        rounding = self.rounding
-        deg = self.deg
-
-        match rounding:
-            case "TYPE1":
-                return f"{type(self).__name__}({rounding=!r}, {deg=})"
-
-            case "TYPE2":
-                domain = self.domain
-                return f"{type(self).__name__}({rounding=!r}, {deg=}, {domain=!r})"
-
-
-_var: contextvars.ContextVar[Context] = contextvars.ContextVar("intervalseries")
-
-
-def getcontext() -> Context:
-    """Return the current context for the active thread."""
-    if ctx := _var.get(None):
-        return ctx
-
-    ctx = Context()
-    _var.set(ctx)
-    return ctx
-
-
-def setcontext(ctx: Context) -> None:
-    """Set the current context for the active thread to `ctx`."""
-    _var.set(ctx)
-
-
-@contextlib.contextmanager
-def localcontext(
-    ctx: Context | None = None,
-    *,
-    rounding: Literal["TYPE1", "TYPE2"] | None = None,
-    deg: int | None = None,
-    domain: Interval | None = None,
-):
-    """Return a context manager that will set the current context for the active thread
-    to a copy of `ctx` on entry to the with-statement and restore the previous context
-    when exiting the with-statement."""
-    if ctx is None:
-        ctx = getcontext()
-
-    if rounding is None:
-        rounding = ctx.rounding
-
-    if deg is None:
-        deg = ctx.deg
-
-    if domain is None:
-        domain = ctx.domain
-
-    ctx = Context(rounding, deg, domain)
-    token = _var.set(ctx)
-
-    try:
-        yield ctx
-    finally:
-        _var.reset(token)
-
-
-class IntervalSeries[T: ComparableScalar](Scalar):
-    """Interval series.
+class IntervalSeries[T: ComparableScalar](JetLike[Interval[T]], Scalar):
+    """Interval polynomial function.
 
     Parameters
     ----------
-    coeffs
-        Sequence of coefficients with respect to the monomial basis.
-    intvl : type[Interval] | None
-        Type of each coefficient.
+    domain : Interval
+        Domain of the interval polynomial function. Note that `domain` must contain
+        zero.
+    coeffs : Iterable[Interval]
+        Coefficients with respect to the monomial basis.
+
+    Attributes
+    ----------
+    domain : Interval
+        Domain of the interval polynomial function.
+    coeffs : list[Interval]
+        Coefficients with respect to the monomial basis.
     """
 
-    __slots__ = ("coeffs", "_intvl")
+    __slots__ = ("domain", "coeffs")
+    domain: Interval[T]
     coeffs: list[Interval[T]]
-    _intvl: type[Interval[T]]
 
-    def __init__(
-        self,
-        coeffs: Sequence[Interval[T] | T | float | int | str],
-        intvl: type[Interval[T]],
-    ):
-        if not issubclass(intvl, Interval):
+    def __init__(self, domain: Interval[T], coeffs: Iterable[Interval[T]]):
+        if not isinstance(domain, Interval):
             raise TypeError
 
-        self.coeffs = [intvl.ensure(x) for x in coeffs]
-        self._intvl = intvl
+        if 0 not in domain:
+            raise ValueError("domain must contain zero")
+
+        self.domain = domain
+        self.coeffs = list(coeffs)
 
     @property
     def interval(self) -> type[Interval[T]]:
-        return self._intvl
+        return type(self.domain)
+
+    @property
+    def order(self) -> int:
+        return len(self.coeffs) - 1
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(domain={self.domain!r}, coeffs={self.coeffs!r})"
 
     def __str__(self) -> str:
-        return f"{type(self).__name__}({self.coeffs})"
+        return f"{type(self).__name__}(domain={self.domain}, coeffs={self.coeffs})"
 
     def compose(self, arg: Self) -> Self:
         """Return the composition.
@@ -179,26 +82,27 @@ class IntervalSeries[T: ComparableScalar](Scalar):
         Examples
         --------
         >>> from verry import FloatInterval as FI
-        >>> f = IntervalSeries([4, 3, 1], intvl=FI)
-        >>> g = IntervalSeries([2, -1, 5], intvl=FI)
+        >>> dom = FI(0, 1)
+        >>> f = IntervalSeries(dom, [FI(4), FI(3), FI(1)])
+        >>> g = IntervalSeries(dom, [FI(2), FI(-1), FI(5)])
         >>> h = f.compose(g)
-        >>> print([coeff.mid() for coeff in h.coeffs])
-        [14.0, -7.0, 36.0, -10.0, 25.0]
+        >>> print([x.mid() for x in h.coeffs[:-1]])
+        [14.0, -7.0]
         """
-        result = self.__class__([self.coeffs[-1]], intvl=self._intvl)
+        result = self.__class__(self.domain, (self.coeffs[-1],))
 
         for x in reversed(self.coeffs[:-1]):
             result *= arg
             result += x
 
-        getcontext().round(result)
+        result = result.round(min(self.order, arg.order))
         return result
 
     def copy(self) -> Self:
         """Return a copy of the series."""
-        return self.__class__([x.copy() for x in self.coeffs], intvl=self._intvl)
+        return self.__class__(self.domain.copy(), (x.copy() for x in self.coeffs))
 
-    def eval(self, arg: Interval[T] | T | float | int) -> Interval[T]:
+    def eval(self, arg: Interval[T] | T | int | float) -> Interval[T]:
         """Return an interval containing the image of `arg`.
 
         See Also
@@ -208,15 +112,16 @@ class IntervalSeries[T: ComparableScalar](Scalar):
         Examples
         --------
         >>> from verry import FloatInterval as FI
-        >>> f = IntervalSeries([8, 2, -1], intvl=FI)
-        >>> y1 = f.eval(2)
-        >>> print(format(y1, ".2f"))
-        [8.00, 8.00]
-        >>> y2 = f.eval(FI(-1, 1))
-        >>> FI(5, 9).issubset(y2)
+        >>> dom = FI(-2, 2)
+        >>> f = IntervalSeries(dom, [FI(8), FI(2), FI(-1)])
+        >>> u = f.eval(2)
+        >>> print(format(u, ".2f"))
+        [inf=8.00, sup=8.00]
+        >>> v = f.eval(FI(-1, 1))
+        >>> FI(5, 9).issubset(v)
         True
         """
-        result = self.coeffs[-1].copy()
+        result = self.coeffs[-1]
 
         for x in reversed(self.coeffs[:-1]):
             result *= arg
@@ -230,18 +135,15 @@ class IntervalSeries[T: ComparableScalar](Scalar):
         Examples
         --------
         >>> from verry import FloatInterval as FI
-        >>> x = IntervalSeries([0, 1], intvl=FI)
+        >>> dom = FI(0, 1)
+        >>> x = IntervalSeries(dom, [FI(0), FI(1), FI(0), FI(0)])
         >>> y = 3 * x**2 + 4 * x + 5
-        >>> z = y.integrate()
+        >>> z = y.integrate().round(3)
         >>> z == x**3 + 2 * x**2 + 5 * x
         True
         """
-        coeffs = [self._intvl(), *(x.copy() for x in self.coeffs)]
-
-        for i in range(2, len(coeffs)):
-            coeffs[i] = coeffs[i] / i
-
-        return self.__class__(coeffs, intvl=self._intvl)
+        tail = (x / (k + 1) for k, x in enumerate(self.coeffs))
+        return self.__class__(self.domain, (self.interval(), *tail))
 
     def reciprocal(self) -> Self:
         """Return the reciprocal of the series.
@@ -250,111 +152,78 @@ class IntervalSeries[T: ComparableScalar](Scalar):
         ------
         ZeroDivisionError
             If the constant term contains zero.
-        """
-        ZERO = self._intvl.operator.ZERO
 
-        if ZERO in (x0 := self.coeffs[0]):
+        Examples
+        --------
+        >>> from verry import FloatInterval as FI
+        >>> dom = FI(0, 1)
+        >>> x = IntervalSeries(dom, [FI(1), FI(1), FI(0), FI(0)])
+        >>> y = x.reciprocal()
+        >>> z = x * y
+        >>> print([x.sup for x in z.coeffs[:-1]])
+        [1.0, 0.0, 0.0]
+        """
+        if 0 in self.coeffs[0]:
             raise ZeroDivisionError
 
-        context = getcontext()
-        dx = self.copy()
-        dx.coeffs[0] = self._intvl()
+        dx = self.__class__(self.domain, (self.interval(), *self.coeffs[1:]))
+        dp = self.__class__(self.domain, (self.interval(1),))
+        result = self.__class__(self.domain, (1 / self.coeffs[0],))
 
-        result = self.__class__([0], intvl=self._intvl)
-        coeff = 1 / x0
-        dxpow = self.__class__([1], intvl=self._intvl)
+        for k in range(1, self.order):
+            dp *= dx
+            result += -dp / pow(-self.coeffs[0], k + 1)
 
-        for _ in range(1, context.deg):
-            result += coeff * dxpow
-            coeff /= -x0
-            dxpow *= dx
+        dp *= dx
+        result += -dp / pow(-self.eval(self.domain), self.order + 1)
+        return result
 
-        match context.rounding:
-            case "TYPE1":
-                result += coeff * dxpow
-                return result
-
-            case "TYPE2":
-                if not isinstance(context.domain, self._intvl):
-                    raise TypeError
-
-                coeff = -pow(-1 / self.eval(x0 | context.domain), context.deg + 1)
-                result += coeff * dxpow
-                return result
-
-    def round_type1(self, deg: int) -> None:
-        """Round the series in Type-I PSA. This method modifies the series in-place.
+    def round(self, order: int) -> Self:
+        """Round the series.
 
         Parameters
         ----------
-        deg
-            Truncation degree.
-
-        See Also
-        --------
-        round_type2
+        order : int
 
         Examples
         --------
         >>> from verry import FloatInterval as FI
-        >>> f = IntervalSeries([1, 2, -3], intvl=FI)
-        >>> g = IntervalSeries([1, -1, 1], intvl=FI)
-        >>> h1 = f * g
-        >>> h2 = h1.copy()
-        >>> h2.round_type1(deg=2)
-        >>> h1(1).issubset(h2(1))
-        False
-        """
-        if (n := deg + 1) < len(self.coeffs):
-            del self.coeffs[n:]
-
-    def round_type2(self, deg: int, domain: Interval[T]) -> None:
-        """Round the series in Type-II PSA. This method modifies the series in-place.
-
-        Parameters
-        ----------
-        deg
-            Truncation degree.
-
-        See Also
-        --------
-        round_type1
-
-        Examples
-        --------
-        >>> from verry import FloatInterval as FI
-        >>> f = IntervalSeries([1, 2, -3], intvl=FI)
-        >>> g = IntervalSeries([1, -1, 1], intvl=FI)
-        >>> h1 = f * g
-        >>> h2 = h1.copy()
-        >>> h2.round_type2(deg=2, domain=FI(0, 2))
-        >>> h1(1).issubset(h2(1))
+        >>> dom = FI(0, 1)
+        >>> x = IntervalSeries(dom, [FI(2), FI(1), FI(-3)])
+        >>> y = IntervalSeries(dom, [FI(5), FI(2), FI(1)])
+        >>> z = x * y
+        >>> w = z.round(1)
+        >>> z(0.5).issubset(w(0.5))
         True
         """
-        if not isinstance(domain, self._intvl):
-            raise TypeError
+        if order < 0:
+            raise ValueError("order must be greater than or equal to zero")
 
-        if deg >= len(self.coeffs) - 1:
-            return
+        if order == 0:
+            return self.__class__(self.domain, (self.eval(self.domain),))
 
-        tmp = self.coeffs[-1].copy()
+        if order >= self.order:
+            return self
 
-        for x in reversed(self.coeffs[deg:-1]):
-            tmp *= domain
-            tmp += x
+        result = self.__class__(self.domain, self.coeffs[:order])
+        tail = self.coeffs[-1]
 
-        del self.coeffs[deg:]
-        self.coeffs.append(tmp)
+        for x in reversed(self.coeffs[order:-1]):
+            tail *= self.domain
+            tail += x
+
+        result.coeffs.append(tail)
+        return result
 
     def _verry_overload_(self, fun, *args, **kwargs):
         if fun is vrf.e:
-            return self.__class__([vrf.e(self._intvl())], intvl=self._intvl)
+            return self.__class__(self.domain, (vrf.e(self.interval()),))
 
         if fun is vrf.ln2:
-            return self.__class__([vrf.ln2(self._intvl())], intvl=self._intvl)
+            return self.__class__(self.domain, (vrf.ln2(self.interval()),))
 
         if fun is vrf.pi:
-            return self.__class__([vrf.pi(self._intvl())], intvl=self._intvl)
+            return self.__class__(self.domain, (vrf.pi(self.interval()),))
 
         return NotImplemented
 
@@ -362,7 +231,10 @@ class IntervalSeries[T: ComparableScalar](Scalar):
         if type(other) is not type(self):
             return NotImplemented
 
-        return other._intvl is self._intvl and other.coeffs == self.coeffs
+        return other.domain == self.domain and other.coeffs == self.coeffs
+
+    @overload
+    def __call__(self, arg: Jet[Interval[T]]) -> Jet[Interval[T]]: ...
 
     @overload
     def __call__(self, arg: Self) -> Self: ...
@@ -378,91 +250,111 @@ class IntervalSeries[T: ComparableScalar](Scalar):
         compose, eval
         """
         match arg:
-            case self._intvl.endtype() | self._intvl() | int() | float():
+            case self.interval() | self.interval.endtype() | int() | float():
                 return self.eval(arg)
 
             case self.__class__():
                 return self.compose(arg)
 
+            case Jet():
+                if len(self.coeffs) <= len(arg.coeffs):
+                    raise ValueError
+
+                order = arg.order
+                result = arg.__class__((self.coeffs[order],))
+
+                for x in reversed(self.coeffs[:order]):
+                    result *= arg
+                    result += x
+
+                return result
+
             case _:
                 raise TypeError
 
-    def __add__(self, rhs: Self | Interval[T] | T | float | int) -> Self:
-        match rhs:
-            case self._intvl.endtype() | self._intvl() | int() | float():
-                result = self.copy()
-                result.coeffs[0] += rhs
-                return result
+    def __add__(self, rhs: Self | Interval[T] | T | int | float) -> Self:
+        if isinstance(rhs, self.interval | self.interval.endtype | int | float):
+            return self.__class__(self.domain, (self.coeffs[0] + rhs, *self.coeffs[1:]))
 
-            case self.__class__():
-                n, m = len(self.coeffs), len(rhs.coeffs)
-                coeffs = [self.coeffs[i] + rhs.coeffs[i] for i in range(min(n, m))]
+        if not isinstance(rhs, type(self)):
+            return NotImplemented
 
-                if n < m:
-                    for i in range(n, m):
-                        coeffs.append(rhs.coeffs[i])
-                else:
-                    for i in range(m, n):
-                        coeffs.append(self.coeffs[i])
+        domain = self.domain if self.domain is rhs.domain else self.domain & rhs.domain
 
-                return self.__class__(coeffs, intvl=self._intvl)
+        if len(rhs.coeffs) == 1:
+            coeffs = (self.coeffs[0] + rhs.coeffs[0], *self.coeffs[1:])
+            return self.__class__(domain, coeffs)
 
-            case _:
-                return NotImplemented
+        if len(self.coeffs) == 1:
+            coeffs = (self.coeffs[0] + rhs.coeffs[0], *rhs.coeffs[1:])
+            return self.__class__(domain, coeffs)
 
-    def __sub__(self, rhs: Self | Interval[T] | T | float | int) -> Self:
-        match rhs:
-            case self._intvl.endtype() | self._intvl() | int() | float():
-                result = self.copy()
-                result.coeffs[0] -= rhs
-                return result
+        coeffs = [x + y for x, y in zip(self.coeffs, rhs.coeffs)]
 
-            case self.__class__():
-                n, m = len(self.coeffs), len(rhs.coeffs)
-                coeffs = [self.coeffs[i] - rhs.coeffs[i] for i in range(min(n, m))]
+        if len(self.coeffs) > len(rhs.coeffs):
+            coeffs.extend(self.coeffs[len(rhs.coeffs) :])
+        else:
+            coeffs.extend(rhs.coeffs[len(self.coeffs) :])
 
-                if n < m:
-                    for i in range(n, m):
-                        coeffs.append(-rhs.coeffs[i])
-                else:
-                    for i in range(m, n):
-                        coeffs.append(self.coeffs[i])
+        return self.__class__(domain, coeffs).round(self.order)
 
-                return self.__class__(coeffs, intvl=self._intvl)
+    def __sub__(self, rhs: Self | Interval[T] | T | int | float) -> Self:
+        if isinstance(rhs, self.interval | self.interval.endtype | int | float):
+            return self.__class__(self.domain, (self.coeffs[0] - rhs, *self.coeffs[1:]))
 
-            case _:
-                return NotImplemented
+        if not isinstance(rhs, type(self)):
+            return NotImplemented
+
+        domain = self.domain if self.domain is rhs.domain else self.domain & rhs.domain
+
+        if len(rhs.coeffs) == 1:
+            coeffs = (self.coeffs[0] - rhs.coeffs[0], *self.coeffs[1:])
+            return self.__class__(domain, coeffs)
+
+        if len(self.coeffs) == 1:
+            coeffs = (self.coeffs[0] - rhs.coeffs[0], *(-x for x in rhs.coeffs[1:]))
+            return self.__class__(domain, coeffs)
+
+        coeffs = [x - y for x, y in zip(self.coeffs, rhs.coeffs)]
+
+        if len(self.coeffs) > len(rhs.coeffs):
+            coeffs.extend(self.coeffs[len(rhs.coeffs) :])
+        else:
+            coeffs.extend(-x for x in rhs.coeffs[len(self.coeffs) :])
+
+        return self.__class__(domain, coeffs).round(self.order)
 
     def __mul__(self, rhs: Self | Interval[T] | T | float | int) -> Self:
-        match rhs:
-            case self._intvl.endtype() | self._intvl() | int() | float():
-                return self.__class__([x * rhs for x in self.coeffs], intvl=self._intvl)
+        if isinstance(rhs, self.interval | self.interval.endtype | int | float):
+            return self.__class__(self.domain, (x * rhs for x in self.coeffs))
 
-            case self.__class__():
-                n, m = len(self.coeffs), len(rhs.coeffs)
-                result = self.__class__([0], intvl=self._intvl)
-                result.coeffs = [self._intvl()] * (n + m - 1)
+        if not isinstance(rhs, type(self)):
+            return NotImplemented
 
-                for i in range(n):
-                    for j in range(m):
-                        result.coeffs[i + j] += self.coeffs[i] * rhs.coeffs[j]
+        domain = self.domain if self.domain is rhs.domain else self.domain & rhs.domain
 
-                getcontext().round(result)
-                return result
+        if len(rhs.coeffs) == 1:
+            return self.__class__(domain, (x * rhs.coeffs[0] for x in self.coeffs))
 
-            case _:
-                return NotImplemented
+        if len(self.coeffs) == 1:
+            return self.__class__(domain, (self.coeffs[0] * x for x in rhs.coeffs))
+
+        coeffs = [self.interval()] * (len(self.coeffs) + len(rhs.coeffs) - 1)
+
+        for i in range(len(self.coeffs)):
+            for j in range(len(rhs.coeffs)):
+                coeffs[i + j] += self.coeffs[i] * rhs.coeffs[j]
+
+        return self.__class__(domain, coeffs).round(min(self.order, rhs.order))
 
     def __truediv__(self, rhs: Self | Interval[T] | T | float | int) -> Self:
-        match rhs:
-            case self._intvl.endtype() | self._intvl() | int() | float():
-                return self.__class__([x / rhs for x in self.coeffs], intvl=self._intvl)
+        if isinstance(rhs, self.interval | self.interval.endtype | int | float):
+            return self.__class__(self.domain, (x / rhs for x in self.coeffs))
 
-            case self.__class__():
-                return self.__mul__(rhs.reciprocal())
+        if not isinstance(rhs, type(self)):
+            return NotImplemented
 
-            case _:
-                return NotImplemented
+        return self.__mul__(rhs.reciprocal())
 
     def __pow__(self, rhs: int) -> Self:
         if not isinstance(rhs, int):
@@ -471,7 +363,7 @@ class IntervalSeries[T: ComparableScalar](Scalar):
         if rhs < 0:
             return self.__pow__(-rhs).reciprocal()
 
-        result = self.__class__([1], intvl=self._intvl)
+        result = self.__class__(self.domain, (self.interval(1),))
         tmp = self.copy()
 
         while rhs != 0:
@@ -496,10 +388,10 @@ class IntervalSeries[T: ComparableScalar](Scalar):
         return self.reciprocal().__mul__(lhs)
 
     def __neg__(self) -> Self:
-        return self.__class__([-x for x in self.coeffs], intvl=self._intvl)
+        return self.__class__(self.domain, (-x for x in self.coeffs))
 
     def __pos__(self) -> Self:
-        return self.copy()
+        return self.__class__(self.domain, (+x for x in self.coeffs))
 
     def __copy__(self) -> Self:
         return self.copy()

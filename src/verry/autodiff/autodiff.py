@@ -2,7 +2,7 @@ import functools
 from collections.abc import Callable
 from typing import Any
 
-from verry.autodiff._dual import Dual, Vector
+from verry.autodiff.dual import Dual, DynDual
 
 
 def deriv[T, **P](fun: Callable[P, T]) -> Callable[P, T]:
@@ -40,17 +40,17 @@ def deriv[T, **P](fun: Callable[P, T]) -> Callable[P, T]:
 
     >>> c1 = df(FI("1.2"))
     >>> print(format(c1, ".6g"))
-    [2.64397, 2.64398]
+    [inf=2.64397, sup=2.64398]
 
-    Also, the second-order derivative can be obtained in the same way.
+    Also, the second-order derivative can be obtained in the same manner.
 
     >>> ddf = deriv(df)
     >>> print(format(ddf(FI("1.2")), ".6g"))
-    [1.97095, 1.97096]
+    [inf=1.97095, sup=1.97096]
     """
 
     def result(*args, **kwargs):
-        tmp: Any = fun(*Dual.variable(*args), **kwargs)  # type: ignore
+        tmp: Any = fun(*DynDual.variable(*args), **kwargs)  # type: ignore
         return tmp.imag[0]
 
     return result
@@ -91,11 +91,11 @@ def grad[T, **P](fun: Callable[P, T]) -> Callable[P, tuple[T, ...]]:
 
     >>> c1 = df(FI("0.5"), FI("1"))
     >>> print(format(c1[0], ".6g"))
-    [0.267261, 0.267262]
+    [inf=0.267261, sup=0.267262]
     """
 
     def result(*args, **kwargs):
-        tmp: Any = fun(*Dual.variable(*args), **kwargs)  # type: ignore
+        tmp: Any = fun(*DynDual.variable(*args), **kwargs)  # type: ignore
         return tuple(tmp.imag)
 
     return result
@@ -122,7 +122,7 @@ def jacobian[T: tuple, **P](fun: Callable[P, T]) -> Callable[P, tuple[T, ...]]:
     """
 
     def result(*args, **kwargs):
-        tmp: Any = fun(*Dual.variable(*args), **kwargs)  # type: ignore
+        tmp: Any = fun(*DynDual.variable(*args), **kwargs)  # type: ignore
         return tuple(tuple(x.imag) for x in tmp)
 
     return result
@@ -142,23 +142,31 @@ def _primitive[T, **P](fun: Callable[P, T]) -> Callable[P, T]:
 
     @functools.wraps(fun)
     def wrapper(*args, **kwargs):
-        max_level = max((x.level for x in args if isinstance(x, Dual)), default=0)
-
-        if max_level == 0:
+        if not any(isinstance(x, Dual) for x in args):
             return fun(*args, **kwargs)
 
-        real: list = []
-        imag: list[tuple[int, Vector]] = []
+        max_priority = max(x.priority for x in args if isinstance(x, Dual))
+        args_real: list = []
+        args_dual: list[tuple[int, Dual]] = []
 
-        for i, x in enumerate(args):
-            if isinstance(x, Dual) and x.level == max_level:
-                real.append(x.real)
-                imag.append((i, x.imag))
-            else:
-                real.append(x)
+        for argnum, arg in enumerate(args):
+            if not isinstance(arg, Dual) or arg.priority < max_priority:
+                args_real.append(arg)
+                continue
 
-        tmp = [derivs[i](*real, **kwargs) * x for i, x in imag]
-        return Dual(wrapper(*real, **kwargs), sum(tmp[1:], start=tmp[0]))
+            args_real.append(arg.real)
+            args_dual.append((argnum, arg))
+
+        head = args_dual[0]
+        imag = [derivs[head[0]](*args_real, **kwargs) * x for x in head[1].imag]
+
+        for argnum, arg in args_dual[1:]:
+            tmp = derivs[argnum](*args_real, **kwargs)
+
+            for i in range(len(imag)):
+                imag[i] += tmp * arg.imag[i]
+
+        return head[1].__class__(wrapper(*args_real, **kwargs), imag)
 
     wrapper.__dict__["_verry_is_primitive"] = True
     wrapper.__dict__["_verry_derivs"] = derivs

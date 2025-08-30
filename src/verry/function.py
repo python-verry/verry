@@ -28,16 +28,6 @@ Power, exponents, and logarithmic functions
     pow
     sqrt
 
-Trigonometric functions
-=======================
-
-.. autosummary::
-    :toctree: generated/
-
-    cos
-    sin
-    tan
-
 """
 
 import math
@@ -51,48 +41,13 @@ from verry.autodiff.autodiff import _defderiv, _primitive
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries
 
-_cos: Any = None
 _e: Any = None
 _exp: Any = None
 _ln2: Any = None
 _log: Any = None
 _pi: Any = None
 _pow: Any = None
-_sin: Any = None
 _sqrt: Any = None
-_tan: Any = None
-
-
-@overload
-def cos[T: Interval](x: T, /) -> T: ...
-
-
-@overload
-def cos(x: float | int, /) -> float: ...
-
-
-@overload
-def cos(x: Any, /) -> Any: ...
-
-
-@_primitive
-def cos(x, /):
-    """Cosine."""
-    if (fun := getattr(type(x), "_verry_overload_", None)) is not None:
-        if (res := fun(x, _cos, x)) is not NotImplemented:
-            return res
-
-        raise TypeError
-
-    match x:
-        case mpmath.ctx_mp_python.mpnumeric():
-            return mpmath.cos(x)
-
-        case float() | int():
-            return math.cos(x)
-
-        case _:
-            raise TypeError
 
 
 @overload
@@ -117,7 +72,7 @@ def e(x, /):
     >>> print(format(e(1.0), ".6f"))
     2.718282
     >>> print(e(FI()))
-    [2.718281, 2.718282]
+    [inf=2.71828, sup=2.71829]
     """
     if fun := getattr(type(x), "_verry_overload_", None):
         if (res := fun(x, _e, x)) is not NotImplemented:
@@ -158,7 +113,7 @@ def exp(x, /):
     >>> print(format(exp(2), ".6f"))
     7.389056
     >>> print(exp(FI(2)))
-    [7.389056, 7.389057]
+    [inf=7.38905, sup=7.38906]
     """
     if fun := getattr(type(x), "_verry_overload_", None):
         if (res := fun(x, _exp, x)) is not NotImplemented:
@@ -199,7 +154,7 @@ def ln2(x, /):
     >>> print(format(ln2(1.0), ".6f"))
     0.693147
     >>> print(ln2(FI()))
-    [0.693147, 0.693148]
+    [inf=0.693147, sup=0.693148]
     """
     if fun := getattr(type(x), "_verry_overload_", None):
         if (res := fun(x, _ln2, x)) is not NotImplemented:
@@ -240,7 +195,7 @@ def log(x, /):
     >>> print(format(log(5), ".6f"))
     1.609438
     >>> print(log(FI(5)))
-    [1.609437, 1.609438]
+    [inf=1.60943, sup=1.60944]
     """
     if fun := getattr(type(x), "_verry_overload_", None):
         if (res := fun(x, _log, x)) is not NotImplemented:
@@ -281,7 +236,7 @@ def pi(x, /):
     >>> print(format(pi(1.0), ".6f"))
     3.141593
     >>> print(pi(FI()))
-    [3.141592, 3.141593]
+    [inf=3.14159, sup=3.14160]
     """
     if fun := getattr(type(x), "_verry_overload_", None):
         if (res := fun(x, _pi, x)) is not NotImplemented:
@@ -326,7 +281,7 @@ def pow(x, y, /):
     >>> print(format(pow(3.25, 1.25), ".6f"))
     4.363693
     >>> print(pow(FI("3.25"), FI("1.25")))
-    [4.363693, 4.363694]
+    [inf=4.36369, sup=4.36370]
     """
     linearized = (x, y)
 
@@ -346,38 +301,6 @@ def pow(x, y, /):
 
         case (float() | int(), float() | int()):
             return math.pow(x, y)
-
-        case _:
-            raise TypeError
-
-
-@overload
-def sin[T: Interval](x: T, /) -> T: ...
-
-
-@overload
-def sin(x: float | int, /) -> float: ...
-
-
-@overload
-def sin(x: Any, /) -> Any: ...
-
-
-@_primitive
-def sin(x, /):
-    """Sine."""
-    if fun := getattr(type(x), "_verry_overload_", None):
-        if (res := fun(x, _sin, x)) is not NotImplemented:
-            return res
-
-        raise TypeError
-
-    match x:
-        case mpmath.ctx_mp_python.mpnumeric():
-            return mpmath.sin(x)
-
-        case float() | int():
-            return math.sin(x)
 
         case _:
             raise TypeError
@@ -405,7 +328,7 @@ def sqrt(x, /):
     >>> print(format(sqrt(2.0), ".6f"))
     1.414214
     >>> print(sqrt(FI(2)))
-    [1.414213, 1.414214]
+    [inf=1.41421, sup=1.41422]
     """
     if fun := getattr(type(x), "_verry_overload_", None):
         if (res := fun(x, _sqrt, x)) is not NotImplemented:
@@ -424,50 +347,14 @@ def sqrt(x, /):
             raise TypeError
 
 
-@overload
-def tan[T: Interval](x: T, /) -> T: ...
-
-
-@overload
-def tan(x: float | int, /) -> float: ...
-
-
-@overload
-def tan(x: Any, /) -> Any: ...
-
-
-@_primitive
-def tan(x, /):
-    """Tangent."""
-    if fun := getattr(type(x), "_verry_overload_", None):
-        if (res := fun(x, _tan, x)) is not NotImplemented:
-            return res
-
-        raise TypeError
-
-    match x:
-        case mpmath.ctx_mp_python.mpnumeric():
-            return mpmath.tan(x)
-
-        case float() | int():
-            return math.tan(x)
-
-        case _:
-            raise TypeError
-
-
-_cos = cos
 _e = e
 _exp = exp
 _ln2 = ln2
 _log = log
 _pi = pi
 _pow = pow
-_sin = sin
 _sqrt = sqrt
-_tan = tan
 
-_defderiv(cos, lambda x: -sin(x))
 _defderiv(e, lambda x: x * 0)
 _defderiv(exp, exp)
 _defderiv(ln2, lambda x: x * 0)
@@ -475,6 +362,4 @@ _defderiv(log, lambda x: 1 / x)
 _defderiv(pi, lambda x: x * 0)
 _defderiv(pow, lambda x, y: y * pow(x, y) / x, argnum=0)
 _defderiv(pow, lambda x, y: log(x) * pow(x, y), argnum=1)
-_defderiv(sin, cos)
 _defderiv(sqrt, lambda x: 1 / (2 * sqrt(x)))
-_defderiv(tan, lambda x: 1 / cos(x) ** 2)

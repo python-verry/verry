@@ -1,18 +1,15 @@
 from collections.abc import Callable, Sequence
 
 from verry.autodiff.autodiff import jacobian
+from verry.autodiff.dual import IntervalJet
 from verry.interval.interval import Interval
-from verry.intervalseries import IntervalSeries, localcontext
 from verry.linalg.intervalmatrix import IntervalMatrix
 from verry.typing import ComparableScalar
 
 
 def seriessol[T: ComparableScalar](
-    fun: Callable,
-    t0: Interval[T],
-    y0: IntervalMatrix[T] | Sequence[Interval[T]],
-    deg: int,
-) -> tuple[IntervalSeries[T], ...]:
+    fun: Callable, t0: T, y0: IntervalMatrix[T] | Sequence[Interval[T]], order: int
+) -> tuple[IntervalJet[T], ...]:
     """Return the Taylor polynomial of the ODE solution.
 
     Parameters
@@ -23,12 +20,12 @@ def seriessol[T: ComparableScalar](
         Initial time.
     y0 : IntervalMatrix | Sequence[Interval]
         Initial state.
-    deg : int
-        Degree of Taylor polynomial.
+    order : int
+        Order of the Taylor polynomial.
 
     Returns
     -------
-    tuple[IntervalSeries, ...]
+    tuple[IntervalJet, ...]
 
     Warnings
     --------
@@ -39,18 +36,22 @@ def seriessol[T: ComparableScalar](
     --------
     >>> from verry import FloatInterval as FI
     >>> series = seriessolution(lambda t, y: (y,), FI(0), [FI(1)], 4)
-    >>> print([format(coeff.mid(), ".3f") for coeff in series[0].coeffs])
+    >>> print([format(x.mid(), ".3f") for x in series[0].coeffs])
     ['1.000', '1.000', '0.500', '0.167', '0.042']
     """
-    t = IntervalSeries([t0, 1], intvl=type(t0))
-    y = (IntervalSeries([x], intvl=type(t0)) for x in y0)
+    intvl = type(t0)
+    t = IntervalJet([t0])
+    series = tuple(IntervalJet([x]) for x in y0)
 
-    with localcontext(rounding="TYPE1", deg=0) as ctx:
-        while ctx.deg < deg:
-            y = (y0 + dy.integrate() for y0, dy in zip(y0, fun(t, *y)))
-            ctx.deg += 1
+    for k in range(1, order + 1):
+        dydt = fun(t, *series)
 
-    return tuple(y)
+        for i in range(len(series)):
+            series[i].coeffs.append(dydt[i].coeffs[k - 1] / k)
+
+        t.coeffs.append(intvl(1 if k == 1 else 0))
+
+    return series
 
 
 def variationaleq(fun: Callable, sol: Callable) -> Callable:

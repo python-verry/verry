@@ -58,7 +58,7 @@ def branchbound[T: ComparableScalar](
     >>> from verry.linalg import FloatIntervalMatrix as FIM
     >>> y, x = branchbound(lambda x, y: x**2 + y, FIM(inf=[-2, -1], sup=[1, 2]))
     >>> print(format(y, ".3f"))
-    [-1.000, -0.999]
+    [inf=-1.000, sup=-0.999]
     """
     if not isinstance(domain, IntervalMatrix):
         raise TypeError
@@ -187,9 +187,9 @@ def branchbound_scalar[T: ComparableScalar](
     >>> from verry import FloatInterval as FI
     >>> y, x = branchbound_scalar(lambda x: x**3 - 2 * x + 3, FI(0, 2))
     >>> print(format(y, ".3f"))
-    [1.911, 1.912]
+    [inf=1.911, sup=1.912]
     >>> print(format(x[0], ".3f"))
-    [0.816, 0.817]
+    [inf=0.816, sup=0.817]
     """
     if not isinstance(domain, Interval):
         raise TypeError

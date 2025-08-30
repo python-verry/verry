@@ -223,7 +223,7 @@ class C0Solver:
         >>> print(r.status)
         SUCCESS
         >>> print(r.content.y[0])
-        [-1.00001, -0.99999]
+        [inf=-1.00001, sup=-0.99999]
 
         The next example fails due to the blow-up of the solution.
 
@@ -257,12 +257,15 @@ class C0Solver:
             u0 = itor.t_prev
             u1 = itor.t
             varfun = variationaleq(fun, lambda t: tuple(x(t - u0) for x in itor.series))
+            dom = 0 | (u1 - u0)
             tmp = seriessol(fun, u0, tracker.sample(), itor.order - 1)
+            tmp = [IntervalSeries(dom, x.coeffs) for x in tmp]
             a1 = intvlmat([x.eval(u1 - u0) for x in tmp])
             jac = eye.empty_like()
 
             for j in range(len(y0)):
-                tmp = seriessol(varfun, u0, eye[j], itor.order - 1)
+                tmp = seriessol(varfun, u0, list(eye[j]), itor.order - 1)
+                tmp = [IntervalSeries(dom, x.coeffs) for x in tmp]
                 a1[j] += itor.series[j].coeffs[-1] * (u1 - u0) ** itor.order
 
                 for i in range(len(y0)):
@@ -448,7 +451,7 @@ class C1Solver:
         >>> print(r.status)
         SUCCESS
         >>> print(r.content.y[0])
-        [-1.00001, -0.99999]
+        [inf=-1.00001, sup=-0.99999]
 
         The next example fails due to the blow-up of the solution.
 
@@ -490,14 +493,13 @@ class C1Solver:
             if miditor.status == "RUNNING" or itor.status == "RUNNING":
                 u1 = intvl(min(itor.t.sup, miditor.t.sup))
 
-            a1 = intvlmat([x.eval(u1 - u0) for x in miditor.series])
-
             if not (res := vareq.solve(fun, u0, u1, itor.series))[0]:
                 return SolverResult("FAILURE", None, res[1])
 
             if u1 != vareq.t:
                 u1 = vareq.t
 
+            a1 = intvlmat([x.eval(u1 - u0) for x in miditor.series])
             jac = vareq.jac
             tracker.update(jac, a1)
             miditor.update(u1, tracker.sample())

@@ -181,10 +181,6 @@ class FloatConverter(Converter[float]):
 
                 spec = spec.replace(prec=prec - 1 - exp, type="f")
                 result = self.format(value, spec, rounding)
-
-                while "." in result and result[-1] in {".", "0"}:
-                    result = result[:-1]
-
                 return result
 
     def repr(self, value):

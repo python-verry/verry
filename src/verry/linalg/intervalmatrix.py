@@ -454,9 +454,10 @@ class IntervalMatrix[S: ComparableScalar](ABC):
     def __iter__(self) -> matiter:
         return matiter(self)
 
-    def __contains__(
-        self, item: Sequence[S | float | int | Sequence[S | float | int]]
-    ) -> bool:
+    def __contains__(self, item: object) -> bool:
+        if not isinstance(item, Sequence | np.ndarray):
+            return False
+
         tmp = np.array(item, dtype=np.object_)
 
         if tmp.shape != self.shape:

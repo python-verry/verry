@@ -34,7 +34,7 @@ def cumulative_trapezoid[T: ComparableScalar](
     >>> from verry import function as vrf
     >>> s = cumulative_trapezoid(lambda x: x**2 + 2 * vrf.sqrt(x), FI(1), FI(2), 300)
     >>> print(s)
-    [4.771236, 4.771237]
+    [inf=4.77123, sup=4.77124]
     """
     if not (isinstance(a, Interval) and type(a) is type(b)):
         raise TypeError
@@ -84,7 +84,7 @@ def cumulative_simpson[T: ComparableScalar](
     >>> from verry import function as vrf
     >>> s = cumulative_simpson(lambda x: x**2 + 2 * vrf.sqrt(x), FI(1), FI(2), 10)
     >>> print(s)
-    [4.771236, 4.771237]
+    [inf=4.77123, sup=4.77124]
     """
     if not (isinstance(a, Interval) and type(a) is type(b)):
         raise TypeError

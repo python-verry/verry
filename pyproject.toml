@@ -1,6 +1,6 @@
 [project]
 name = "verry"
-version = "0.2.0"
+version = "0.3.0"
 description = "An open-source package for verified computation written in Python."
 readme = "README.rst"
 authors = [{name = "Ryoga Iwanami", email = "iwanami.ryoga@akane.waseda.jp"}]
