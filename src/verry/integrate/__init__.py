@@ -77,8 +77,6 @@ Miscellaneous
     C1SolverResultContent
     ODESolution
     SolverResult
-    seriessol
-    variationaleq
 
 """
 
@@ -103,7 +101,6 @@ from .tracker import (
     doubleton,
     qr,
 )
-from .utility import seriessol, variationaleq
 from .vareqsolver import VarEqSolver, VarEqSolverFactory, brute, lognorm
 
 __all__ = [
@@ -128,8 +125,6 @@ __all__ = [
     "direct",
     "doubleton",
     "qr",
-    "seriessol",
-    "variationaleq",
     "VarEqSolver",
     "VarEqSolverFactory",
     "brute",

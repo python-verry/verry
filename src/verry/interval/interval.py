@@ -1,6 +1,6 @@
 import enum
 from abc import ABC, abstractmethod
-from typing import Final, Literal, Self
+from typing import NamedTuple, Self
 
 from verry import function as vrf
 from verry.misc.formatspec import FormatSpec
@@ -12,22 +12,17 @@ class RoundingMode(enum.Enum):
 
     Attributes
     ----------
-    ROUND_CEILING
-    ROUND_FAST
-    ROUND_FLOOR
+    CEILING
+    FAST
+    FLOOR
     """
 
-    ROUND_CEILING = enum.auto()
-    ROUND_FAST = enum.auto()
-    ROUND_FLOOR = enum.auto()
+    CEILING = enum.auto()
+    FAST = enum.auto()
+    FLOOR = enum.auto()
 
     def __repr__(self):
         return f"<{type(self).__name__}.{self.name}>"
-
-
-ROUND_CEILING: Final = RoundingMode.ROUND_CEILING
-ROUND_FAST: Final = RoundingMode.ROUND_FAST
-ROUND_FLOOR: Final = RoundingMode.ROUND_FLOOR
 
 
 class Converter[T: ComparableScalar](ABC):
@@ -36,19 +31,13 @@ class Converter[T: ComparableScalar](ABC):
     __slots__ = ()
 
     @abstractmethod
-    def fromfloat(self, value: float, strict: bool = True) -> T:
-        """Convert the float to a number.
-
-        Raises
-        ------
-        ValueError
-            If `strict` is ``True`` and `value` cannot be converted without loss.
-        """
+    def fromfloat(self, x: float, /) -> T:
+        """Convert a float to the number."""
         raise NotImplementedError
 
     @abstractmethod
-    def fromstr(self, value: str, rounding: RoundingMode) -> T:
-        """Convert the string to a number with rounding taken into account.
+    def fromstr(self, rnd: RoundingMode, x: str, /) -> T:
+        """Convert a string to the number with rounding taken into account.
 
         Raises
         ------
@@ -57,30 +46,21 @@ class Converter[T: ComparableScalar](ABC):
         """
         raise NotImplementedError
 
-    def tostr(
-        self,
-        value: T,
-        rounding: Literal[RoundingMode.ROUND_CEILING, RoundingMode.ROUND_FLOOR],
-    ) -> str:
-        """Convert the number to a string with rounding taken into account."""
+    def format(self, rnd: RoundingMode, x: T, spec: FormatSpec, /) -> str:
         raise NotImplementedError
 
-    def format(
-        self,
-        value: T,
-        spec: FormatSpec,
-        rounding: Literal[RoundingMode.ROUND_CEILING, RoundingMode.ROUND_FLOOR],
-    ) -> str:
-        raise NotImplementedError
+    def fromint(self, rnd: RoundingMode, x: int, /) -> T:
+        """Convert an integer to the number with rounding taken into account.
 
-    def fromint(self, value: int, rounding: RoundingMode) -> T:
-        """Convert the integer to a number with rounding taken into account.
-
-        This method is defined as ``fromstr(str(value), rounding)`` if not overloaded.
+        This method is defined as ``fromstr(rnd, str(x))`` if not overloaded.
         """
-        return self.fromstr(str(value), rounding)
+        return self.fromstr(rnd, str(x))
 
-    def repr(self, value: T) -> str:
+    def repr(self, x: T, /) -> str:
+        raise NotImplementedError
+
+    def str(self, rnd: RoundingMode, x: T, /) -> str:
+        """Convert the number to the string with rounding taken into account."""
         raise NotImplementedError
 
 
@@ -158,15 +138,35 @@ class Operator[T: ComparableScalar](ABC):
         """Calcurate the square root and round towards negative infinity."""
         raise NotImplementedError
 
+    @abstractmethod
+    def mid(self, x: T, y: T) -> T:
+        """Calculate an approximation of the midpoint.
+
+        Parameters
+        ----------
+        x, y
+
+        Returns
+        -------
+        r
+            Approximation of the midpoint that satisfy ``min(x, y) <= r <= max(x, y)``.
+        """
+        raise NotImplementedError
+
+
+class MidRadResult[T: ComparableScalar](NamedTuple):
+    mid: T
+    rad: T
+
 
 class Interval[T: ComparableScalar](Scalar, ABC):
     """Abstract base class for inf-sup type intervals.
 
     Parameters
     ----------
-    inf : endtype | float | int | str | None, optional
+    inf : endtype | int | float | str | None, optional
         Infimum of the interval.
-    sup : endtype | float | int | str | None, optional
+    sup : endtype | int | float | str | None, optional
         Supremum of the interval.
 
     Attributes
@@ -194,8 +194,8 @@ class Interval[T: ComparableScalar](Scalar, ABC):
 
     def __init__(
         self,
-        inf: T | float | int | str | None = None,
-        sup: T | float | int | str | None = None,
+        inf: T | int | float | str | None = None,
+        sup: T | int | float | str | None = None,
     ):
         if inf is None:
             if sup is None:
@@ -212,10 +212,10 @@ class Interval[T: ComparableScalar](Scalar, ABC):
                 self.inf = inf
 
             case str():
-                self.inf = self.converter.fromstr(inf, ROUND_FLOOR)
+                self.inf = self.converter.fromstr(RoundingMode.FLOOR, inf)
 
             case int():
-                self.inf = self.converter.fromint(inf, ROUND_FLOOR)
+                self.inf = self.converter.fromint(RoundingMode.FLOOR, inf)
 
             case float():
                 self.inf = self.converter.fromfloat(inf)
@@ -228,10 +228,10 @@ class Interval[T: ComparableScalar](Scalar, ABC):
                 self.sup = sup
 
             case str():
-                self.sup = self.converter.fromstr(sup, ROUND_CEILING)
+                self.sup = self.converter.fromstr(RoundingMode.CEILING, sup)
 
             case int():
-                self.sup = self.converter.fromint(sup, ROUND_CEILING)
+                self.sup = self.converter.fromint(RoundingMode.CEILING, sup)
 
             case float():
                 self.sup = self.converter.fromfloat(sup)
@@ -243,7 +243,7 @@ class Interval[T: ComparableScalar](Scalar, ABC):
             raise ValueError
 
     @classmethod
-    def ensure(cls, value: Self | T | float | int | str) -> Self:
+    def ensure(cls, value: Self | T | int | float | str) -> Self:
         """Convert `value` to an interval and return its copy."""
         return value.copy() if isinstance(value, cls) else cls(value)  # type: ignore
 
@@ -276,7 +276,7 @@ class Interval[T: ComparableScalar](Scalar, ABC):
         """
         return self.operator.csub(self.sup, self.inf)
 
-    def hull(self, *args: Self | T | float | int) -> Self:
+    def hull(self, *args: Self | T | int | float) -> Self:
         """Return an interval hull."""
 
         result = self.__class__(self.inf, self.sup)
@@ -286,7 +286,7 @@ class Interval[T: ComparableScalar](Scalar, ABC):
 
         return result
 
-    def interiorcontains(self, other: Self | T | float | int) -> bool:
+    def interiorcontains(self, other: Self | T | int | float) -> bool:
         """Return ``True`` if the interior of the interval contains `other`."""
         match other:
             case self.endtype():
@@ -307,7 +307,7 @@ class Interval[T: ComparableScalar](Scalar, ABC):
         """Return ``True`` if both `inf` and `sup` are finite."""
         return self.mag() < self.operator.INFINITY
 
-    def isdisjoint(self, other: Self | T | float | int) -> bool:
+    def isdisjoint(self, other: Self | T | int | float) -> bool:
         """Return ``True`` if the interval has no elements in common with `other`."""
         match other:
             case self.endtype():
@@ -345,13 +345,17 @@ class Interval[T: ComparableScalar](Scalar, ABC):
         """
         return max(abs(self.inf), abs(self.sup))
 
-    @abstractmethod
     def mid(self) -> T:
         """Return an approximation of the midpoint.
 
         ``x.mid() in x`` is guaranteed to be ``True`` for any `x`.
         """
-        raise NotImplementedError
+        return self.operator.mid(self.inf, self.sup)
+
+    def midrad(self) -> MidRadResult[T]:
+        """Return a pair of :meth:`mid` and :meth:`rad`."""
+        mid = self.operator.mid(self.inf, self.sup)
+        return MidRadResult(mid, (self - mid).mag())
 
     def mig(self) -> T:
         """Return a mignitude of the interval.
@@ -378,6 +382,10 @@ class Interval[T: ComparableScalar](Scalar, ABC):
     def __repr__(self) -> str:
         try:
             inf = self.converter.repr(self.inf)
+
+            if self.inf == self.sup:
+                return f"{type(self).__name__}({inf})"
+
             sup = self.converter.repr(self.sup)
             return f"{type(self).__name__}(inf={inf}, sup={sup})"
         except NotImplementedError:
@@ -385,22 +393,17 @@ class Interval[T: ComparableScalar](Scalar, ABC):
 
     def __str__(self) -> str:
         try:
-            inf = self.converter.tostr(self.inf, ROUND_FLOOR)
-            sup = self.converter.tostr(self.sup, ROUND_CEILING)
+            inf = self.converter.str(RoundingMode.FLOOR, self.inf)
+            sup = self.converter.str(RoundingMode.CEILING, self.sup)
             return f"[inf={inf}, sup={sup}]"
         except NotImplementedError:
             return self.__repr__()
 
-    def __format__(self, format_spec: str) -> str:
-        spec = FormatSpec(format_spec)
-
-        try:
-            tmp = spec.replace(fill="\u0020", align=None, zfill=False, width=None)
-            inf = self.converter.format(self.inf, tmp.copy(), ROUND_FLOOR)
-            sup = self.converter.format(self.sup, tmp, ROUND_CEILING)
-        except NotImplementedError:
-            raise ValueError
-
+    def __format__(self, fmt: str) -> str:
+        spec = FormatSpec(fmt)
+        tmp = spec.replace(fill="\u0020", align=None, zfill=False, width=None)
+        inf = self.converter.format(RoundingMode.FLOOR, self.inf, tmp.copy())
+        sup = self.converter.format(RoundingMode.CEILING, self.sup, tmp)
         spec = FormatSpec(fill=spec.fill, align=spec.align, width=spec.width)
         return spec.format(f"[inf={inf}, sup={sup}]")
 
@@ -424,7 +427,7 @@ class Interval[T: ComparableScalar](Scalar, ABC):
 
         raise TypeError
 
-    def __add__(self, rhs: Self | T | float | int) -> Self:
+    def __add__(self, rhs: Self | T | int | float) -> Self:
         cadd = self.operator.cadd
         fadd = self.operator.fadd
 
@@ -443,7 +446,7 @@ class Interval[T: ComparableScalar](Scalar, ABC):
 
         return NotImplemented
 
-    def __sub__(self, rhs: Self | T | float | int) -> Self:
+    def __sub__(self, rhs: Self | T | int | float) -> Self:
         csub = self.operator.csub
         fsub = self.operator.fsub
 
@@ -462,8 +465,7 @@ class Interval[T: ComparableScalar](Scalar, ABC):
 
         return NotImplemented
 
-    def __mul__(self, rhs: Self | T | float | int) -> Self:
-        ZERO = self.operator.ZERO
+    def __mul__(self, rhs: Self | T | int | float) -> Self:
         cmul = self.operator.cmul
         fmul = self.operator.fmul
 
@@ -474,6 +476,8 @@ class Interval[T: ComparableScalar](Scalar, ABC):
                 return self.__class__(inf, sup)
 
             case self.__class__():
+                ZERO = self.operator.ZERO
+
                 if self.sup <= ZERO:
                     if rhs.sup <= ZERO:
                         inf = fmul(self.sup, rhs.sup)
@@ -520,14 +524,13 @@ class Interval[T: ComparableScalar](Scalar, ABC):
 
         return NotImplemented
 
-    def __truediv__(self, rhs: Self | T | float | int) -> Self:
-        ZERO = self.operator.ZERO
+    def __truediv__(self, rhs: Self | T | int | float) -> Self:
         cdiv = self.operator.cdiv
         fdiv = self.operator.fdiv
 
         match rhs:
             case self.endtype():
-                if rhs == ZERO:
+                if rhs == self.operator.ZERO:
                     raise ZeroDivisionError
 
                 inf = min(fdiv(self.inf, rhs), fdiv(self.sup, rhs))
@@ -535,6 +538,8 @@ class Interval[T: ComparableScalar](Scalar, ABC):
                 return self.__class__(inf, sup)
 
             case self.__class__():
+                ZERO = self.operator.ZERO
+
                 if rhs.inf == rhs.sup == ZERO:
                     raise ZeroDivisionError
 
@@ -607,11 +612,10 @@ class Interval[T: ComparableScalar](Scalar, ABC):
         return NotImplemented
 
     def __pow__(self, rhs: int) -> Self:
-        ZERO = self.operator.ZERO
-        ONE = self.operator.ONE
-
         if not isinstance(rhs, int):
             return NotImplemented
+
+        ONE = self.operator.ONE
 
         if rhs < 0:
             return self.__pow__(-rhs).__rtruediv__(ONE)
@@ -627,12 +631,14 @@ class Interval[T: ComparableScalar](Scalar, ABC):
             rhs //= 2
             tmp *= tmp
 
+        ZERO = self.operator.ZERO
+
         if is_even and self.inf <= ZERO <= self.sup:
             result.inf = ZERO
 
         return result
 
-    def __and__(self, rhs: Self | T | float | int) -> Self:
+    def __and__(self, rhs: Self | T | int | float) -> Self:
         match rhs:
             case self.endtype():
                 if not self.inf <= rhs <= self.sup:
@@ -657,7 +663,7 @@ class Interval[T: ComparableScalar](Scalar, ABC):
 
         return NotImplemented
 
-    def __or__(self, rhs: Self | T | float | int) -> Self:
+    def __or__(self, rhs: Self | T | int | float) -> Self:
         match rhs:
             case self.endtype():
                 return self.__class__(min(self.inf, rhs), max(self.sup, rhs))
@@ -673,16 +679,16 @@ class Interval[T: ComparableScalar](Scalar, ABC):
 
         return NotImplemented
 
-    def __radd__(self, lhs: Self | T | float | int) -> Self:
+    def __radd__(self, lhs: Self | T | int | float) -> Self:
         return self.__add__(lhs)
 
-    def __rsub__(self, lhs: Self | T | float | int) -> Self:
+    def __rsub__(self, lhs: Self | T | int | float) -> Self:
         return self.__neg__().__add__(lhs)
 
-    def __rmul__(self, lhs: Self | T | float | int) -> Self:
+    def __rmul__(self, lhs: Self | T | int | float) -> Self:
         return self.__mul__(lhs)
 
-    def __rtruediv__(self, lhs: Self | T | float | int) -> Self:
+    def __rtruediv__(self, lhs: Self | T | int | float) -> Self:
         match lhs:
             case self.endtype() | float() | int():
                 return self.__class__(lhs).__truediv__(self)
@@ -692,10 +698,10 @@ class Interval[T: ComparableScalar](Scalar, ABC):
 
         return NotImplemented
 
-    def __rand__(self, lhs: Self | T | float | int) -> Self:
+    def __rand__(self, lhs: Self | T | int | float) -> Self:
         return self.__and__(lhs)
 
-    def __ror__(self, lhs: Self | T | float | int) -> Self:
+    def __ror__(self, lhs: Self | T | int | float) -> Self:
         return self.__or__(lhs)
 
     def __neg__(self) -> Self:

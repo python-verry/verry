@@ -4,8 +4,8 @@ from typing import Literal
 
 from verry import function as vrf
 from verry.autodiff.autodiff import jacobian
+from verry.integrate import _impl
 from verry.integrate.integrator import IntegratorFactory
-from verry.integrate.utility import seriessol, variationaleq
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries
 from verry.linalg.intervalmatrix import IntervalMatrix
@@ -125,8 +125,8 @@ class _BruteVarEqSolver(VarEqSolver):
     ) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         n = len(series)
         eye = self._intvlmat.eye(n)
-        varfun = variationaleq(fun, lambda t: tuple(x(t - t0) for x in series))
-        varitors = [self._integrator.create(varfun, t0, x, t1) for x in eye]
+        vareq = _impl.variationaleq(fun, t0, series)
+        varitors = [self._integrator.create(vareq, t0, x, t1) for x in eye]
 
         for x in varitors:
             if not (res := x.step())[0]:
@@ -193,13 +193,13 @@ class _LogNormVarEqSolver(VarEqSolver):
                 mu = intvl(tmp1.sup)
 
         u0 = [vrf.exp(mu * dom) * intvl(-1, 1) for _ in range(n)]
-        vareq = variationaleq(fun, lambda t: tuple(x(t - t0) for x in series))
+        vareq = _impl.variationaleq(fun, t0, series)
         jac = self._intvlmat.empty((n, n))
 
         for j in range(n):
             v0 = tuple(intvl(1 if j == j else 0) for j in range(n))
-            tmp2 = seriessol(vareq, t0, v0, series[0].order - 1)
-            tmp3 = seriessol(vareq, t0, u0, series[0].order)
+            tmp2 = _impl.seriessol(vareq, t0, v0, series[0].order - 1)
+            tmp3 = _impl.seriessol(vareq, t0, u0, series[0].order)
             tmp2 = [IntervalSeries(dom, x.coeffs) for x in tmp2]
             tmp3 = [IntervalSeries(dom, x.coeffs) for x in tmp3]
 

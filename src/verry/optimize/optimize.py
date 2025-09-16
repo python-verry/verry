@@ -72,13 +72,13 @@ def branchbound[T: ComparableScalar](
         fprime = grad(fun)
 
     if isinstance(xtol, (float, int)):
-        xtol = intvl.converter.fromfloat(float(xtol), strict=False)
+        xtol = intvl.converter.fromfloat(float(xtol))
 
     if not isinstance(xtol, intvl.endtype):
         raise TypeError
 
     if isinstance(ytol, (float, int)):
-        ytol = intvl.converter.fromfloat(float(ytol), strict=False)
+        ytol = intvl.converter.fromfloat(float(ytol))
 
     if not isinstance(ytol, intvl.endtype):
         raise TypeError
@@ -202,13 +202,13 @@ def branchbound_scalar[T: ComparableScalar](
         fprime = deriv(fun)
 
     if isinstance(xtol, (float, int)):
-        xtol = domain.converter.fromfloat(float(xtol), strict=False)
+        xtol = domain.converter.fromfloat(float(xtol))
 
     if not isinstance(xtol, intvl.endtype):
         raise TypeError
 
     if isinstance(ytol, (float, int)):
-        ytol = domain.converter.fromfloat(float(ytol), strict=False)
+        ytol = domain.converter.fromfloat(float(ytol))
 
     if not isinstance(ytol, intvl.endtype):
         raise TypeError

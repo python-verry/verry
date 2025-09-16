@@ -3,7 +3,7 @@ from collections.abc import Callable
 
 import numpy.typing as npt
 
-from verry.affine import AffineForm, Context, getcontext, setcontext, summarize
+from verry.affineform import AffineForm, Context, getcontext, setcontext, summarize
 from verry.linalg.intervalmatrix import IntervalMatrix, approx_norm, approx_qr, inv
 
 

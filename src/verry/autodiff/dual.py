@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from typing import Any, Final, Self, final
 
 from verry.interval.interval import Interval
@@ -236,12 +236,7 @@ class Dual[T1: Scalar, T2 = Any](Scalar, ABC):
             raise RuntimeError("subclassing is forbidden")
 
 
-class JetLike[T: Scalar](ABC):
-    __slots__ = ()
-    coeffs: Sequence[T]
-
-
-class Jet[T1: Scalar, T2 = Any](Scalar, JetLike[T1], ABC):
+class Jet[T1: Scalar, T2 = Any](Scalar, ABC):
     r"""Abstract base class for jets.
 
     Parameters
@@ -328,45 +323,58 @@ class Jet[T1: Scalar, T2 = Any](Scalar, JetLike[T1], ABC):
     def __str__(self) -> str:
         return f"{type(self).__name__}([{(', ').join(str(x) for x in self.coeffs)}])"
 
-    def __add__(self, rhs: Self | JetLike[T1] | T1 | T2 | int) -> Self:
+    def __call__(self, arg: Self) -> Self:
+        if not isinstance(arg, type(self)):
+            raise TypeError
+
+        if len(self.coeffs) < len(arg.coeffs):
+            raise ValueError
+
+        order = arg.order
+        result = arg.__class__((self.coeffs[order],))
+
+        for x in reversed(self.coeffs[:order]):
+            result *= arg
+            result += x
+
+        return result
+
+    def __add__(self, rhs: Self | T1 | T2 | int) -> Self:
         if not self._is_acceptable(rhs):
             return NotImplemented
 
-        if not isinstance(rhs, JetLike):
+        if not isinstance(rhs, type(self)):
             return self.__class__((self.coeffs[0] + rhs, *self.coeffs[1:]))  # type: ignore
 
         if len(rhs.coeffs) == 1:
             return self.__class__((self.coeffs[0] + rhs.coeffs[0], *self.coeffs[1:]))
 
         if len(self.coeffs) == 1:
-            ZERO = self.coeffs[0] * 0
-            tail = (ZERO + x for x in rhs.coeffs[1:])
-            return self.__class__((self.coeffs[0] + rhs.coeffs[0], *tail))
+            return self.__class__((self.coeffs[0] + rhs.coeffs[0], *rhs.coeffs[1:]))
 
         return self.__class__(x + y for x, y in zip(self.coeffs, rhs.coeffs))
 
-    def __sub__(self, rhs: JetLike[T1] | T1 | T2 | int) -> Self:
+    def __sub__(self, rhs: Self | T1 | T2 | int) -> Self:
         if not self._is_acceptable(rhs):
             return NotImplemented
 
-        if not isinstance(rhs, JetLike):
+        if not isinstance(rhs, type(self)):
             return self.__class__((self.coeffs[0] - rhs, *self.coeffs[1:]))  # type: ignore
 
         if len(rhs.coeffs) == 1:
             return self.__class__((self.coeffs[0] - rhs.coeffs[0], *self.coeffs[1:]))
 
         if len(self.coeffs) == 1:
-            ZERO = self.coeffs[0] * 0
-            tail = (ZERO - x for x in rhs.coeffs[1:])
+            tail = (-x for x in rhs.coeffs[1:])
             return self.__class__((self.coeffs[0] - rhs.coeffs[0], *tail))
 
         return self.__class__(x - y for x, y in zip(self.coeffs, rhs.coeffs))
 
-    def __mul__(self, rhs: JetLike[T1] | T1 | T2 | int) -> Self:
+    def __mul__(self, rhs: Self | T1 | T2 | int) -> Self:
         if not self._is_acceptable(rhs):
             return NotImplemented
 
-        if not isinstance(rhs, JetLike):
+        if not isinstance(rhs, type(self)):
             return self.__class__(x * rhs for x in self.coeffs)  # type: ignore
 
         if len(rhs.coeffs) == 1:
@@ -383,11 +391,11 @@ class Jet[T1: Scalar, T2 = Any](Scalar, JetLike[T1], ABC):
 
         return self.__class__(coeffs)
 
-    def __truediv__(self, rhs: JetLike[T1] | T1 | T2 | int) -> Self:
+    def __truediv__(self, rhs: Self | T1 | T2 | int) -> Self:
         if not self._is_acceptable(rhs):
             return NotImplemented
 
-        if not isinstance(rhs, JetLike):
+        if not isinstance(rhs, type(self)):
             return self.__class__(x / rhs for x in self.coeffs)  # type: ignore
 
         if len(rhs.coeffs) == 1:
@@ -441,20 +449,20 @@ class Jet[T1: Scalar, T2 = Any](Scalar, JetLike[T1], ABC):
     def __pos__(self) -> Self:
         return self.__class__(+x for x in self.coeffs)
 
-    def __radd__(self, lhs: JetLike[T1] | T1 | T2 | int):
+    def __radd__(self, lhs: Self | T1 | T2 | int):
         return self.__add__(lhs)
 
-    def __rsub__(self, lhs: JetLike[T1] | T1 | T2 | int):
+    def __rsub__(self, lhs: Self | T1 | T2 | int):
         return self.__neg__().__add__(lhs)
 
-    def __rmul__(self, lhs: JetLike[T1] | T1 | T2 | int) -> Self:
+    def __rmul__(self, lhs: Self | T1 | T2 | int) -> Self:
         return self.__mul__(lhs)
 
-    def __rtruediv__(self, lhs: JetLike[T1] | T1 | T2 | int) -> Self:
+    def __rtruediv__(self, lhs: Self | T1 | T2 | int) -> Self:
         if not self._is_acceptable(lhs):
             return NotImplemented
 
-        if not isinstance(lhs, JetLike):
+        if not isinstance(lhs, type(self)):
             reciprocal = [1 / self.coeffs[0]]
 
             for k in range(1, len(self.coeffs)):
@@ -563,7 +571,7 @@ class IntervalJet[T: ComparableScalar](Jet[Interval[T], T | int | float]):
 
     def _is_acceptable(self, value: object) -> bool:
         intvl = self._intvl
-        return isinstance(value, JetLike | intvl | intvl.endtype | int | float)
+        return isinstance(value, type(self) | intvl | intvl.endtype | int | float)
 
 
 @final

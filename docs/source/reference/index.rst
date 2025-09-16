@@ -2,7 +2,7 @@
 API reference
 #############
 
-* :mod:`verry.affine`
+* :mod:`verry.affineform`
 * :mod:`verry.autodiff`
 * :mod:`verry.function`
 * :mod:`verry.integrate`
@@ -17,7 +17,7 @@ API reference
     :maxdepth: 1
     :hidden:
 
-    verry.affine <affine>
+    verry.affineform <affineform>
     verry.autodiff <autodiff>
     verry.function <function>
     verry.integrate <integrate>
