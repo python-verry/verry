@@ -279,8 +279,8 @@ class AffineForm[T: ComparableScalar](Scalar):
                 result = self.__class__(self._intvl())
                 tmp = (self._intvl(self._mid) + rhs).midrad()
                 result._mid = tmp[0]
-                result._coeffs = self._coeffs.copy()
                 result._excess = cadd(self._excess, tmp[1])
+                result._coeffs = self._coeffs.copy()
 
                 if ctx.rounding == "BRUTE":
                     result._coeffs[ctx.create()] = result._excess
@@ -296,25 +296,26 @@ class AffineForm[T: ComparableScalar](Scalar):
                 tmp = (self._intvl(self._mid) + rhs._mid).midrad()
                 result._mid = tmp[0]
                 result._excess = cadd(self._excess, tmp[1])
+                result._coeffs = self._coeffs.copy()
 
-                for [key, value] in self._coeffs.items():
-                    if (x := rhs._coeffs.get(key)) is None:
-                        result._coeffs[key] = value
+                for [key, x] in self._coeffs.items():
+                    if (y := rhs._coeffs.get(key)) is None:
                         continue
 
-                    tmp = (self._intvl(value) * x).midrad()
+                    tmp = (self._intvl(x) + y).midrad()
                     result._coeffs[key] = tmp[0]
                     result._excess = cadd(result._excess, tmp[1])
 
-                for [key, value] in rhs._coeffs.items():
+                for [key, y] in rhs._coeffs.items():
                     if key not in self._coeffs:
-                        result._coeffs[key] = value
+                        result._coeffs[key] = y
 
                 if ctx.rounding == "BRUTE":
                     result._coeffs[ctx.create()] = result._excess
                     result._excess = ZERO
 
                 return result
+
             case _:
                 return NotImplemented
 
@@ -324,48 +325,46 @@ class AffineForm[T: ComparableScalar](Scalar):
         ctx = getcontext()
 
         match rhs:
-            case self._intvl.endtype() | float() | int():
+            case self._intvl():
                 result = self.__class__(self._intvl())
-                tmp = self._intvl(self._mid) - rhs
-                result._mid = tmp.mid()
+                tmp = (self._intvl(self._mid) - rhs).midrad()
+                result._mid = tmp[0]
+                result._excess = cadd(self._excess, tmp[1])
                 result._coeffs = self._coeffs.copy()
-                error = tmp.rad()
 
-                match ctx.rounding:
-                    case "BRUTE":
-                        result._coeffs[ctx.create()] = error
-                        return result
+                if ctx.rounding == "BRUTE":
+                    result._coeffs[ctx.create()] = result._excess
+                    result._excess = ZERO
 
-                    case "FAST":
-                        error = cadd(error, self._excess)
-                        result._excess = error
-                        return result
+                return result
+
+            case self._intvl.endtype() | int() | float():
+                return self.__add__(self._intvl(rhs))
 
             case self.__class__():
                 result = self.__class__(self._intvl())
-                tmp = self._intvl(self._mid) - rhs._mid
-                result._mid = tmp.mid()
-                error = tmp.rad()
+                tmp = (self._intvl(self._mid) - rhs._mid).midrad()
+                result._mid = tmp[0]
+                result._excess = cadd(self._excess, tmp[1])
+                result._coeffs = self._coeffs.copy()
 
-                for key in set(self._coeffs) | set(rhs._coeffs):
-                    x = self._intvl(self._coeffs.get(key, ZERO))
-                    y = self._intvl(rhs._coeffs.get(key, ZERO))
-                    tmp = x - y
-                    result._coeffs[key] = tmp.mid()
-                    error = cadd(error, tmp.rad())
+                for [key, x] in self._coeffs.items():
+                    if (y := rhs._coeffs.get(key)) is None:
+                        continue
 
-                match ctx.rounding:
-                    case "BRUTE":
-                        result._coeffs[ctx.create()] = error
-                        return result
+                    tmp = (self._intvl(x) - y).midrad()
+                    result._coeffs[key] = tmp[0]
+                    result._excess = cadd(result._excess, tmp[1])
 
-                    case "FAST":
-                        error = cadd(error, cadd(self._excess, rhs._excess))
-                        result._excess = error
-                        return result
+                for [key, y] in rhs._coeffs.items():
+                    if key not in self._coeffs:
+                        result._coeffs[key] = -y
 
-            case self._intvl():
-                return self.__sub__(self.__class__(rhs))
+                if ctx.rounding == "BRUTE":
+                    result._coeffs[ctx.create()] = result._excess
+                    result._excess = ZERO
+
+                return result
 
             case _:
                 return NotImplemented
@@ -380,24 +379,25 @@ class AffineForm[T: ComparableScalar](Scalar):
             case self._intvl.endtype() | float() | int():
                 rhs = self._intvl(rhs)
                 result = self.__class__(self._intvl())
-                tmp = self._mid * rhs
-                result._mid = tmp.mid()
-                error = tmp.rad()
+                tmp = (self._mid * rhs).midrad()
+                result._mid = tmp[0]
+                error = tmp[1]
 
                 for key, coeff in self._coeffs.items():
-                    tmp = coeff * rhs
-                    result._coeffs[key] = tmp.mid()
-                    error = cadd(error, tmp.rad())
+                    tmp = (coeff * rhs).midrad()
+                    result._coeffs[key] = tmp[0]
+                    error = cadd(error, tmp[1])
 
-                match ctx.rounding:
-                    case "BRUTE":
-                        result._coeffs[ctx.create()] = error
-                        return result
+                if self._excess != ZERO:
+                    error = cadd(error, cmul(self._excess, rhs.mag()))
 
-                    case "FAST":
-                        error = cadd(error, cmul(self._excess, rhs.mag()))
-                        result._excess = error
-                        return result
+                result._excess = error
+
+                if ctx.rounding == "BRUTE":
+                    result._coeffs[ctx.create()] = result._excess
+                    result._excess = ZERO
+
+                return result
 
             case self.__class__():
                 result = self.__class__(self._intvl())
