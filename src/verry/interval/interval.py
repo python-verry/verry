@@ -362,7 +362,15 @@ class Interval[T: ComparableScalar](Scalar, ABC):
 
         The mignitude of `x` is defined as ``min(abs(x.inf), abs(x.sup))``.
         """
-        return min(abs(self.inf), abs(self.sup))
+        zero = self.operator.ZERO
+
+        if self.inf >= zero:
+            return self.inf
+
+        if self.sup <= zero:
+            return -self.sup
+
+        return zero
 
     def rad(self) -> T:
         """Return an upper bound of the radius."""

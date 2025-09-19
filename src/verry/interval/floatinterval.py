@@ -38,11 +38,11 @@ class FloatConverter(Converter[float]):
 
     def format(self, rnd, x, spec, /):
         if rnd == RoundingMode.FAST:
-            fmt = f".{spec.prec}" if spec.prec != 0 else ""
+            fmt = f".{spec.prec if spec.prec is not None else 6}"
             fmt += spec.type if spec.type is not None else "g"
             return format(x, fmt)
 
-        fmt = f".{spec.prec if spec.prec != 0 else 6}"
+        fmt = f".{spec.prec if spec.prec is not None else 6}"
         fmt += "D" if rnd == RoundingMode.FLOOR else "U"
         fmt += spec.type if spec.type is not None else "g"
         return format(gmpy2.mpfr(x, context=gmpy2.ieee(64)), fmt)
