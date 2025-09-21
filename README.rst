@@ -21,12 +21,11 @@ Getting started
 
 Verry can be installed from PyPI: `pip install verry`.
 
-Here is a simple example:
-```python
->>> from verry import FloatInterval as FI
->>> print(sum(FI("0.1") for _ in range(10)))
-[inf=0.999999, sup=1.00001]
-```
+Here is a simple example::
+
+    >>> from verry import FloatInterval as FI
+    >>> print(sum(FI("0.1") for _ in range(10)))
+    [inf=0.999999, sup=1.00001]
 
 *******
 License
