@@ -223,7 +223,7 @@ class C0Solver:
         >>> print(r.status)
         SUCCESS
         >>> print(r.content.y[0])
-        [inf=-1.00001, sup=-0.99999]
+        [inf=-1.00001, sup=-0.999999]
 
         The next example fails due to the blow-up of the solution.
 
@@ -451,7 +451,7 @@ class C1Solver:
         >>> print(r.status)
         SUCCESS
         >>> print(r.content.y[0])
-        [inf=-1.00001, sup=-0.99999]
+        [inf=-1.00001, sup=-0.999999]
 
         The next example fails due to the blow-up of the solution.
 
