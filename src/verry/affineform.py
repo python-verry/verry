@@ -1,9 +1,9 @@
 """
-#######################################
-Affine arithmetic (:mod:`verry.affine`)
-#######################################
+###########################################
+Affine arithmetic (:mod:`verry.affineform`)
+###########################################
 
-.. currentmodule:: verry.affine
+.. currentmodule:: verry.affineform
 
 This module provides affine arithmetic.
 
@@ -43,46 +43,42 @@ from verry.typing import ComparableScalar, Scalar
 class Context:
     """Create a new context.
 
-    Context can be regarded as a collection of noise symbols. Each instance of
-    :class:`AffineForm` belongs to one context, and affine forms belonging to
-    different contexts are considered independent.
+    Context can be regarded as a collection of noise symbols. All instances of
+    :class:`AffineForm` belong to the context in which they were initialized, and all
+    operations must be performed within the context.
 
     Parameters
     ----------
     rounding : Literal["BRUTE", "FAST"], default="BRUTE"
-        Rounding mode. If `rounding` is ``"FAST"``, no new noise symbols are appended
-        by addition, subtraction, or constant multiplication. Thus, the operations are
+        Rounding mode. If `rounding` is ``"FAST"``, no new noise symbols are appended by
+        addition, subtraction, or constant multiplication. Thus, the operations are
         relatively fast. Instead, the radius of the resulting interval may be increased.
     """
 
-    __slots__ = ("_rounding", "_count")
-    _rounding: Literal["BRUTE", "FAST"]
+    __slots__ = ("rounding", "_count")
+    rounding: Literal["BRUTE", "FAST"]
     _count: int
 
     def __init__(self, rounding: Literal["BRUTE", "FAST"] = "BRUTE"):
-        self._rounding = rounding
+        self.rounding = rounding
         self._count = 0
 
-    @property
-    def rounding(self) -> Literal["BRUTE", "FAST"]:
-        return self._rounding
-
     def copy(self) -> Self:
-        return self.__class__(self._rounding)
+        return self.__class__(self.rounding)
 
-    def create_noisesymbol(self) -> int:
+    def create(self) -> int:
         result = self._count
         self._count += 1
         return result
 
     def __str__(self):
-        return f"{type(self).__name__}({self._rounding!r})"
+        return f"{type(self).__name__}({self.rounding!r})"
 
     def __copy__(self) -> Self:
         return self.copy()
 
 
-_var: contextvars.ContextVar[Context] = contextvars.ContextVar("affine")
+_var: contextvars.ContextVar[Context] = contextvars.ContextVar("affineform")
 
 
 def getcontext() -> Context:
@@ -102,14 +98,14 @@ def setcontext(ctx: Context) -> None:
 
 @contextlib.contextmanager
 def localcontext(
-    ctx: Context | None = None, *, rounding: Literal["FAST", "BRUTE"] | None = None
+    ctx: Context | None = None, /, *, rounding: Literal["FAST", "BRUTE"] | None = None
 ):
     """Return a context manager."""
     if ctx is None:
         ctx = getcontext()
 
     if rounding is None:
-        rounding = ctx._rounding
+        rounding = ctx.rounding
 
     ctx = Context(rounding)
     token = _var.set(ctx)
@@ -148,7 +144,6 @@ class AffineForm[T: ComparableScalar](Scalar):
     _coeffs: dict[int, T]
     _excess: T
     _intvl: type[Interval[T]]
-    _context: Context
 
     def __init__(self, value: Interval[T], **kwargs: Never):
         if kwargs.get("_skipinit", False):
@@ -158,51 +153,23 @@ class AffineForm[T: ComparableScalar](Scalar):
             raise TypeError
 
         self._intvl = type(value)
-        self._coeffs = {}
         self._excess = value.operator.ZERO
-        self._context = getcontext()
 
-        key = self._context.create_noisesymbol()
+        if value.inf == value.sup:
+            self._mid = value.inf
+            self._coeffs = {}
+            return
+
         self._mid = value.mid()
-        self._coeffs[key] = value.rad()
-
-    @property
-    def context(self) -> Context:
-        return self._context
+        self._coeffs = dict([(getcontext().create(), value.rad())])
 
     @property
     def interval(self) -> type[Interval[T]]:
         return self._intvl
 
-    @classmethod
-    def zero(cls, intvl: type[Interval[T]], ctx: Context | None = None) -> Self:
-        """Return an affine form consisting only of the constant term 0.
-
-        Parameters
-        ----------
-        intvl : type[Interval]
-            Interval type.
-        ctx : Context, optional
-            Context to which the affine form belongs. If no context is specified, the
-            current context is used.
-        """
-        if not issubclass(intvl, Interval):
-            raise TypeError
-
-        if ctx is None:
-            ctx = getcontext()
-
-        result = cls(None, _skipinit=True)  # type: ignore
-        result._mid = intvl.operator.ZERO
-        result._coeffs = {}
-        result._excess = intvl.operator.ZERO
-        result._intvl = intvl
-        result._context = ctx
-        return result
-
     def copy(self) -> Self:
         """Return a shallow copy of the affine form."""
-        result = self.zero(self._intvl, self._context)
+        result = self.__class__(self._intvl())
         result._mid = self._mid
         result._coeffs = self._coeffs.copy()
         result._excess = self._excess
@@ -230,8 +197,8 @@ class AffineForm[T: ComparableScalar](Scalar):
         >>> x.range() == x.mid() + x.rad() * x.interval(-1, 1)
         True
         """
-        rad = self.rad()
-        return self._mid + self._intvl(-rad, rad)
+        tmp = self.rad()
+        return self._mid + self._intvl(-tmp, tmp)
 
     def reciprocal(self) -> Self:
         """Return the reciprocal of the affine form.
@@ -248,55 +215,31 @@ class AffineForm[T: ComparableScalar](Scalar):
         if ZERO in (range := self.range()):
             raise ZeroDivisionError
 
-        context = getcontext()
-        self._ensurecontext(context)
-
-        result = self.zero(self._intvl, context)
+        result = self.__class__(self._intvl())
         tmp = self._intvl(range.inf)
         inv = -1 / (tmp * range.sup)
         am = (tmp + range.sup) / 2
         gm = vrf.sqrt(tmp * range.sup)
 
         if range.inf > ZERO:
-            tmp = inv * (self._mid - (am + gm))
-            result._mid = tmp.mid()
-            error = cadd((inv * (am - gm)).mag(), tmp.rad())
+            tmp = (inv * (self._mid - (am + gm))).midrad()
+            result._mid = tmp[0]
+            error = cadd((inv * (am - gm)).mag(), tmp[1])
         else:
-            tmp = inv * (self._mid - (am - gm))
-            result._mid = tmp.mid()
-            error = cadd((inv * (am + gm)).mag(), tmp.rad())
+            tmp = (inv * (self._mid - (am - gm))).midrad()
+            result._mid = tmp[0]
+            error = cadd((inv * (am + gm)).mag(), tmp[1])
 
         for key, coeff in self._coeffs.items():
-            tmp = inv * coeff
-            result._coeffs[key] = tmp.mid()
-            error = cadd(error, tmp.rad())
+            tmp = (inv * coeff).midrad()
+            result._coeffs[key] = tmp[0]
+            error = cadd(error, tmp[1])
 
-        if context._rounding == "FAST":
+        if self._excess != ZERO:
             error = cadd(error, cmul(self._excess, inv.mag()))
-            result._excess = ZERO
 
-        key = context.create_noisesymbol()
-        result._coeffs[key] = error
+        result._coeffs[getcontext().create()] = error
         return result
-
-    def _ensurecontext(self, ctx: Context) -> None:
-        if self._context is ctx:
-            return
-
-        coeffs = {}
-
-        for value in self._coeffs.values():
-            key = ctx.create_noisesymbol()
-            coeffs[key] = value
-
-        if self._context._rounding == "FAST" and ctx._rounding == "BRUTE":
-            key = ctx.create_noisesymbol()
-            coeffs[key] = self._excess
-            self._excess = self._intvl.operator.ZERO
-
-        self._coeffs.clear()
-        self._coeffs = coeffs
-        self._context = ctx
 
     def _verry_overload_(self, fun, *args, **kwargs):
         match fun:
@@ -320,7 +263,6 @@ class AffineForm[T: ComparableScalar](Scalar):
             and other._mid == self._mid
             and other._coeffs == self._coeffs
             and other._excess == self._excess
-            and other._context is self._context
         )
 
     def __len__(self) -> int:
@@ -330,56 +272,49 @@ class AffineForm[T: ComparableScalar](Scalar):
     def __add__(self, rhs: Self | Interval[T] | T | float | int) -> Self:
         ZERO = self._intvl.operator.ZERO
         cadd = self._intvl.operator.cadd
-
-        context = getcontext()
-        self._ensurecontext(context)
+        ctx = getcontext()
 
         match rhs:
-            case self._intvl.endtype() | float() | int():
-                result = self.zero(self._intvl, context)
-                tmp = self._intvl(self._mid) + rhs
-                result._mid = tmp.mid()
+            case self._intvl():
+                result = self.__class__(self._intvl())
+                tmp = (self._intvl(self._mid) + rhs).midrad()
+                result._mid = tmp[0]
+                result._excess = cadd(self._excess, tmp[1])
                 result._coeffs = self._coeffs.copy()
-                error = tmp.rad()
 
-                match context._rounding:
-                    case "BRUTE":
-                        key = context.create_noisesymbol()
-                        result._coeffs[key] = error
-                        return result
+                if ctx.rounding == "BRUTE":
+                    result._coeffs[ctx.create()] = result._excess
+                    result._excess = ZERO
 
-                    case "FAST":
-                        error = cadd(error, self._excess)
-                        result._excess = error
-                        return result
+                return result
+
+            case self._intvl.endtype() | int() | float():
+                return self.__add__(self._intvl(rhs))
 
             case self.__class__():
-                rhs._ensurecontext(context)
-                result = self.zero(self._intvl, context)
-                tmp = self._intvl(self._mid) + rhs._mid
-                result._mid = tmp.mid()
-                error = tmp.rad()
+                result = self.__class__(self._intvl())
+                tmp = (self._intvl(self._mid) + rhs._mid).midrad()
+                result._mid = tmp[0]
+                result._excess = cadd(self._excess, tmp[1])
+                result._coeffs = self._coeffs.copy()
 
-                for key in set(self._coeffs) | set(rhs._coeffs):
-                    x = self._intvl(self._coeffs.get(key, ZERO))
-                    y = self._intvl(rhs._coeffs.get(key, ZERO))
-                    tmp = x + y
-                    result._coeffs[key] = tmp.mid()
-                    error = cadd(error, tmp.rad())
+                for [key, x] in self._coeffs.items():
+                    if (y := rhs._coeffs.get(key)) is None:
+                        continue
 
-                match context._rounding:
-                    case "BRUTE":
-                        key = context.create_noisesymbol()
-                        result._coeffs[key] = error
-                        return result
+                    tmp = (self._intvl(x) + y).midrad()
+                    result._coeffs[key] = tmp[0]
+                    result._excess = cadd(result._excess, tmp[1])
 
-                    case "FAST":
-                        error = cadd(error, cadd(self._excess, rhs._excess))
-                        result._excess = error
-                        return result
+                for [key, y] in rhs._coeffs.items():
+                    if key not in self._coeffs:
+                        result._coeffs[key] = y
 
-            case self._intvl():
-                return self.__add__(self.__class__(rhs))
+                if ctx.rounding == "BRUTE":
+                    result._coeffs[ctx.create()] = result._excess
+                    result._excess = ZERO
+
+                return result
 
             case _:
                 return NotImplemented
@@ -387,56 +322,49 @@ class AffineForm[T: ComparableScalar](Scalar):
     def __sub__(self, rhs: Self | Interval[T] | T | float | int) -> Self:
         ZERO = self._intvl.operator.ZERO
         cadd = self._intvl.operator.cadd
-
-        context = getcontext()
-        self._ensurecontext(context)
+        ctx = getcontext()
 
         match rhs:
-            case self._intvl.endtype() | float() | int():
-                result = self.zero(self._intvl, context)
-                tmp = self._intvl(self._mid) - rhs
-                result._mid = tmp.mid()
+            case self._intvl():
+                result = self.__class__(self._intvl())
+                tmp = (self._intvl(self._mid) - rhs).midrad()
+                result._mid = tmp[0]
+                result._excess = cadd(self._excess, tmp[1])
                 result._coeffs = self._coeffs.copy()
-                error = tmp.rad()
 
-                match context._rounding:
-                    case "BRUTE":
-                        key = context.create_noisesymbol()
-                        result._coeffs[key] = error
-                        return result
+                if ctx.rounding == "BRUTE":
+                    result._coeffs[ctx.create()] = result._excess
+                    result._excess = ZERO
 
-                    case "FAST":
-                        error = cadd(error, self._excess)
-                        result._excess = error
-                        return result
+                return result
+
+            case self._intvl.endtype() | int() | float():
+                return self.__add__(self._intvl(rhs))
 
             case self.__class__():
-                rhs._ensurecontext(context)
-                result = self.zero(self._intvl, context)
-                tmp = self._intvl(self._mid) - rhs._mid
-                result._mid = tmp.mid()
-                error = tmp.rad()
+                result = self.__class__(self._intvl())
+                tmp = (self._intvl(self._mid) - rhs._mid).midrad()
+                result._mid = tmp[0]
+                result._excess = cadd(self._excess, tmp[1])
+                result._coeffs = self._coeffs.copy()
 
-                for key in set(self._coeffs) | set(rhs._coeffs):
-                    x = self._intvl(self._coeffs.get(key, ZERO))
-                    y = self._intvl(rhs._coeffs.get(key, ZERO))
-                    tmp = x - y
-                    result._coeffs[key] = tmp.mid()
-                    error = cadd(error, tmp.rad())
+                for [key, x] in self._coeffs.items():
+                    if (y := rhs._coeffs.get(key)) is None:
+                        continue
 
-                match context._rounding:
-                    case "BRUTE":
-                        key = context.create_noisesymbol()
-                        result._coeffs[key] = error
-                        return result
+                    tmp = (self._intvl(x) - y).midrad()
+                    result._coeffs[key] = tmp[0]
+                    result._excess = cadd(result._excess, tmp[1])
 
-                    case "FAST":
-                        error = cadd(error, cadd(self._excess, rhs._excess))
-                        result._excess = error
-                        return result
+                for [key, y] in rhs._coeffs.items():
+                    if key not in self._coeffs:
+                        result._coeffs[key] = -y
 
-            case self._intvl():
-                return self.__sub__(self.__class__(rhs))
+                if ctx.rounding == "BRUTE":
+                    result._coeffs[ctx.create()] = result._excess
+                    result._excess = ZERO
+
+                return result
 
             case _:
                 return NotImplemented
@@ -445,37 +373,34 @@ class AffineForm[T: ComparableScalar](Scalar):
         ZERO = self._intvl.operator.ZERO
         cadd = self._intvl.operator.cadd
         cmul = self._intvl.operator.cmul
-
-        context = getcontext()
-        self._ensurecontext(context)
+        ctx = getcontext()
 
         match rhs:
             case self._intvl.endtype() | float() | int():
                 rhs = self._intvl(rhs)
-                result = self.zero(self._intvl, context)
-                tmp = self._mid * rhs
-                result._mid = tmp.mid()
-                error = tmp.rad()
+                result = self.__class__(self._intvl())
+                tmp = (self._mid * rhs).midrad()
+                result._mid = tmp[0]
+                error = tmp[1]
 
                 for key, coeff in self._coeffs.items():
-                    tmp = coeff * rhs
-                    result._coeffs[key] = tmp.mid()
-                    error = cadd(error, tmp.rad())
+                    tmp = (coeff * rhs).midrad()
+                    result._coeffs[key] = tmp[0]
+                    error = cadd(error, tmp[1])
 
-                match context._rounding:
-                    case "BRUTE":
-                        key = context.create_noisesymbol()
-                        result._coeffs[key] = error
-                        return result
+                if self._excess != ZERO:
+                    error = cadd(error, cmul(self._excess, rhs.mag()))
 
-                    case "FAST":
-                        error = cadd(error, cmul(self._excess, rhs.mag()))
-                        result._excess = error
-                        return result
+                result._excess = error
+
+                if ctx.rounding == "BRUTE":
+                    result._coeffs[ctx.create()] = result._excess
+                    result._excess = ZERO
+
+                return result
 
             case self.__class__():
-                rhs._ensurecontext(context)
-                result = self.zero(self._intvl, context)
+                result = self.__class__(self._intvl())
                 tmp = self._intvl(self._mid) * rhs._mid
                 result._mid = tmp.mid()
                 error = cadd(cmul(self.rad(), rhs.rad()), tmp.rad())
@@ -487,13 +412,12 @@ class AffineForm[T: ComparableScalar](Scalar):
                     result._coeffs[key] = tmp.mid()
                     error = cadd(error, tmp.rad())
 
-                if context._rounding == "FAST":
+                if ctx.rounding == "FAST":
                     error = cadd(error, cmul(abs(self._mid), rhs._excess))
                     error = cadd(error, cmul(self._excess, abs(rhs._mid)))
                     result._excess = ZERO
 
-                key = context.create_noisesymbol()
-                result._coeffs[key] = error
+                result._coeffs[ctx.create()] = error
                 return result
 
             case self._intvl():
@@ -523,7 +447,7 @@ class AffineForm[T: ComparableScalar](Scalar):
         if rhs < 0:
             return self.__pow__(-rhs).reciprocal()
 
-        result = self.__class__(self._intvl(1))
+        result = self.__class__(self._intvl(self._intvl.operator.ONE))
         tmp = self.copy()
 
         while rhs != 0:
@@ -548,7 +472,7 @@ class AffineForm[T: ComparableScalar](Scalar):
         return self.reciprocal().__mul__(lhs)
 
     def __neg__(self) -> Self:
-        result = self.zero(self._intvl, self._context)
+        result = self.__class__(self._intvl())
         result._mid = -self._mid
         result._coeffs = {key: -value for key, value in self._coeffs.items()}
         result._excess = self._excess
@@ -601,14 +525,13 @@ def summarize(vars: Sequence[AffineForm], n: int, m: int = 0) -> None:
     if not 2 <= len(vars) <= n:
         raise ValueError
 
-    context = getcontext()
+    ctx = getcontext()
     keys: set[int] = set()
 
     for var in vars:
         if var._intvl is not vars[0]._intvl:
             raise ValueError
 
-        var._ensurecontext(context)
         keys |= var._coeffs.keys()
 
     if len(keys) < min(n, m):
@@ -643,9 +566,8 @@ def summarize(vars: Sequence[AffineForm], n: int, m: int = 0) -> None:
                 rad = cadd(rad, abs(a))
                 del coeffs[key]
 
-        if context.rounding == "FAST":
+        if var._excess != ZERO:
             rad = cadd(rad, var._excess)
             var._excess = ZERO
 
-        key = context.create_noisesymbol()
-        coeffs[key] = rad
+        coeffs[ctx.create()] = rad

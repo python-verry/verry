@@ -3,7 +3,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, Literal, Self
 
 from verry import function as vrf
-from verry.integrate.utility import seriessol
+from verry.integrate import _impl
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries
 from verry.linalg.intervalmatrix import IntervalMatrix
@@ -302,7 +302,7 @@ class _EiLoIntegrator[T: ComparableScalar](Integrator[T]):
                 self._rtol = rtol
 
             case float() | int():
-                self._rtol = t0.converter.fromfloat(float(rtol), strict=False)
+                self._rtol = t0.converter.fromfloat(float(rtol))
 
             case _:
                 raise TypeError
@@ -312,7 +312,7 @@ class _EiLoIntegrator[T: ComparableScalar](Integrator[T]):
                 self._atol = atol
 
             case float() | int():
-                self._atol = t0.converter.fromfloat(float(atol), strict=False)
+                self._atol = t0.converter.fromfloat(float(atol))
 
             case _:
                 raise TypeError
@@ -349,7 +349,7 @@ class _EiLoIntegrator[T: ComparableScalar](Integrator[T]):
         cadd = self.t.operator.cadd
         csub = self.t.operator.csub
 
-        p0 = seriessol(self._fun, self.t, self.y, self.order)
+        p0 = _impl.seriessol(self._fun, self.t, self.y, self.order)
         tmp = ZERO
 
         for i in (self.order, self.order - 1, self.order - 2):
@@ -369,7 +369,7 @@ class _EiLoIntegrator[T: ComparableScalar](Integrator[T]):
             self.status = "FAILURE"
             return (False, "failed to determine a step size")
 
-        EPSILON = intvl(intvl.converter.fromfloat(0.1, False))
+        EPSILON = intvl(intvl.converter.fromfloat(0.1))
         t_next = intvl(cadd(self.t.sup, stepsize))
         is_verified = False
 
@@ -413,7 +413,7 @@ class _EiLoIntegrator[T: ComparableScalar](Integrator[T]):
             return (False, f"failed to verify within {self._max_tries} trials")
 
         series = [IntervalSeries(dom, x.coeffs) for x in p0]
-        p1 = seriessol(self._fun, self.t, a1, self.order)
+        p1 = _impl.seriessol(self._fun, self.t, a1, self.order)
 
         for i in range(len(p0)):
             series[i].coeffs[-1] = p1[i].coeffs[-1]
@@ -564,7 +564,7 @@ class _KashiIntegrator[T: ComparableScalar](Integrator[T]):
                 self._rtol = rtol
 
             case int() | float():
-                self._rtol = t0.converter.fromfloat(float(rtol), False)
+                self._rtol = t0.converter.fromfloat(float(rtol))
 
             case _:
                 raise TypeError
@@ -574,7 +574,7 @@ class _KashiIntegrator[T: ComparableScalar](Integrator[T]):
                 self._atol = atol
 
             case int() | float():
-                self._atol = t0.converter.fromfloat(float(atol), False)
+                self._atol = t0.converter.fromfloat(float(atol))
 
             case _:
                 raise TypeError
@@ -611,7 +611,7 @@ class _KashiIntegrator[T: ComparableScalar](Integrator[T]):
         cadd = self.t.operator.cadd
         csub = self.t.operator.csub
 
-        p0 = seriessol(self._fun, self.t, self.y, self.order)
+        p0 = _impl.seriessol(self._fun, self.t, self.y, self.order)
         tmp: Any = ZERO
 
         for i in (self.order, self.order - 1, self.order - 2):

@@ -1,38 +1,34 @@
-###################
-Verry documentation
-###################
+#####
+Verry
+#####
 
-Verry is an open-source package for verified computation written in Python. 
+Verry is an open-source library for `verified computation <https://en.wikipedia.org/wiki/Validated_numerics>`_ written in Python 3.
 
-.. grid:: 2
+Features
+--------
 
-    .. grid-item-card:: User guide
-         :text-align: center
+* Affine arithmetic
+* Automatic differentiation
+* Interval arithmetic
+* Nonlinear equations solver
+* ODE solver
+* Quadrature
 
-         Under construction.
+Getting started
+---------------
 
-         +++
+Verry can be installed from PyPI: ``pip install verry``.
 
-         .. button-ref:: userguide/index
-            :expand:
-            :color: secondary
-            :click-parent:
+Here is a simple example::
 
-            To the user guide
+   >>> from verry import FloatInterval as FI
+   >>> print(sum(FI("0.1") for _ in range(10)))
+   [inf=0.999999, sup=1.00001]
 
-    .. grid-item-card::  API reference
-         :text-align: center
+License
+-------
 
-         Under construction.
-
-         +++
-
-         .. button-ref:: reference/index
-            :expand:
-            :color: secondary
-            :click-parent:
-
-            To the API reference
+Verry is distributed under the `BSD 3-Clause License <https://opensource.org/license/bsd-3-clause>`_.
 
 .. toctree::
    :maxdepth: 1

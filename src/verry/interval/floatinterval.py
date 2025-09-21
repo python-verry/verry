@@ -1,8 +1,6 @@
-import decimal
-import fractions
 import math
-import re
-import sys
+
+import gmpy2
 
 from verry import function as vrf
 from verry.interval import _floatoperator  # type: ignore
@@ -10,184 +8,50 @@ from verry.interval.interval import Converter, Interval, Operator, RoundingMode
 from verry.misc.formatspec import FormatSpec
 
 
-def _decimal_exponent(x: decimal.Decimal | fractions.Fraction) -> int:
-    if x == 0:
-        return 0
-
-    result = 0
-
-    while abs(x) < 1:  # type: ignore
-        x *= 10
-        result -= 1
-
-    while abs(x) >= 10:  # type: ignore
-        x /= 10
-        result += 1
-
-    return result
-
-
 class FloatConverter(Converter[float]):
     __slots__ = ()
 
-    def fromfloat(self, value, strict=True):
-        return value
+    def fromfloat(self, x, /):
+        return x
 
-    def fromstr(self, value, rounding) -> float:
-        if rounding == RoundingMode.ROUND_FAST:
-            return float(value)
+    def fromstr(self, rnd, x, /) -> float:
+        if rnd == RoundingMode.FAST:
+            return float(x)
 
-        if re.fullmatch("[-+]?inf(?:inity)?", value, re.I) is not None:
-            return -math.inf if value[0] == "-" else math.inf
+        ctx = gmpy2.ieee(64)
 
-        try:
-            frac = fractions.Fraction(value)
-        except ValueError:
-            raise ValueError(f"Could not convert string to float: '{value}'")
-
-        if frac == 0:
-            return 0.0
-
-        if is_negative := frac < 0:
-            frac *= -1
-
-        if frac < sys.float_info.min:
-            match rounding:
-                case RoundingMode.ROUND_CEILING:
-                    return 0.0 if is_negative else -sys.float_info.min
-
-                case RoundingMode.ROUND_FLOOR:
-                    return -sys.float_info.min if is_negative else 0.0
-
-        if frac > sys.float_info.max:
-            match rounding:
-                case RoundingMode.ROUND_CEILING:
-                    return -sys.float_info.max if is_negative else math.inf
-
-                case RoundingMode.ROUND_FLOOR:
-                    return -math.inf if is_negative else sys.float_info.max
-
-        shift = 0
-
-        while frac < 2**52:
-            frac *= 2
-            shift += 1
-
-        while frac >= 2**53:
-            frac /= 2
-            shift -= 1
-
-        div, mod = divmod(frac.numerator, frac.denominator)
-
-        if is_negative:
-            div = -div
-            mod = -mod
-
-        tmp = float(div)
-
-        if shift > 0:
-            for _ in range(shift):
-                tmp *= 0.5
+        if rnd == RoundingMode.FLOOR:
+            ctx.round = gmpy2.RoundDown
         else:
-            for _ in range(-shift):
-                tmp *= 2.0
+            ctx.round = gmpy2.RoundUp
 
-        match rounding:
-            case RoundingMode.ROUND_CEILING if mod > 0:
-                return math.nextafter(tmp, float("inf"))
+        return float(gmpy2.mpfr(x, context=ctx))
 
-            case RoundingMode.ROUND_FLOOR if mod < 0:
-                return math.nextafter(tmp, -float("inf"))
+    def fromint(self, rnd, x, /) -> float:
+        if abs(x) <= 0x1FFFFFFFFFFFFF:
+            return float(x)
 
-            case _:
-                return tmp
+        return self.fromstr(rnd, str(x))
 
-    def fromint(self, value, rounding) -> float:
-        if abs(value) <= 0x1FFFFFFFFFFFFF:
-            return float(value)
+    def str(self, rnd, x, /):
+        return self.format(rnd, x, FormatSpec())
 
-        return self.fromstr(str(value), rounding)
+    def format(self, rnd, x, spec, /):
+        if rnd == RoundingMode.FAST:
+            fmt = f".{spec.prec if spec.prec is not None else 6}"
+            fmt += spec.type if spec.type is not None else "g"
+            return format(x, fmt)
 
-    def tostr(self, value, mode):
-        return self.format(value, FormatSpec(), mode)
+        fmt = f".{spec.prec if spec.prec is not None else 6}"
+        fmt += "D" if rnd == RoundingMode.FLOOR else "U"
+        fmt += spec.type if spec.type is not None else "g"
+        return format(gmpy2.mpfr(x, context=gmpy2.ieee(64)), fmt)
 
-    def format(self, value, spec, rounding):
-        if value == 0.0 or not math.isfinite(value):
-            return spec.format(value)
+    def repr(self, x, /):
+        if not math.isfinite(x):
+            return repr(x)
 
-        context = decimal.Context(Emin=decimal.MIN_EMIN, Emax=decimal.MAX_EMAX)
-        frac = fractions.Fraction(value)
-        prec = spec.prec
-
-        if prec is None:
-            prec = 6
-
-        match spec.type:
-            case "e" | "E":
-                prec_pow = 10**prec
-                shift = 0
-
-                while abs(frac) < prec_pow:
-                    frac *= 10
-                    shift += 1
-
-                while abs(frac) >= 10 * prec_pow:
-                    frac /= 10
-                    shift -= 1
-
-                with decimal.localcontext(context, prec=prec + 1):
-                    match rounding:
-                        case RoundingMode.ROUND_CEILING:
-                            tmp = decimal.Decimal(math.ceil(frac))
-
-                        case RoundingMode.ROUND_FLOOR:
-                            tmp = decimal.Decimal(math.floor(frac))
-
-                    if shift > 0:
-                        for _ in range(shift):
-                            tmp /= 10
-                    else:
-                        for _ in range(-shift):
-                            tmp *= 10
-
-                    return spec.format(tmp)
-
-            case "f" | "F":
-                exp = _decimal_exponent(frac)
-
-                for _ in range(prec):
-                    frac *= 10
-
-                with decimal.localcontext(context, prec=max(2, prec + exp + 1)):
-                    match rounding:
-                        case RoundingMode.ROUND_CEILING:
-                            tmp = decimal.Decimal(math.ceil(frac))
-
-                        case RoundingMode.ROUND_FLOOR:
-                            tmp = decimal.Decimal(math.floor(frac))
-
-                    for _ in range(prec):
-                        tmp /= 10
-
-                    return spec.format(tmp)
-
-            case "g" | "G" | None:
-                exp = _decimal_exponent(round(frac, prec))
-
-                if not -4 <= exp < prec:
-                    spec = spec.replace(prec=prec - 1, type="e")
-                    result = self.format(value, spec, rounding)
-                    return result
-
-                spec = spec.replace(prec=prec - 1 - exp, type="f")
-                result = self.format(value, spec, rounding)
-                return result
-
-    def repr(self, value):
-        if not math.isfinite(value):
-            return repr(value)
-
-        return f"<{value.hex()}>"
+        return f"<{x.hex()}>"
 
 
 class FloatOperator(Operator[float]):
@@ -210,6 +74,20 @@ class FloatOperator(Operator[float]):
 
     def fsqr(self, value):
         return _floatoperator.fsqr(value)
+
+    def mid(self, x, y):
+        INFINITY = math.inf
+
+        if x == -INFINITY:
+            return 0.0 if y == INFINITY else x
+
+        if y == INFINITY:
+            return x
+
+        if abs(x) >= 1 and abs(y) >= 1:
+            return 0.5 * x + 0.5 * y
+
+        return 0.5 * (x + y)
 
 
 class FloatInterval(Interval[float]):
@@ -237,21 +115,6 @@ class FloatInterval(Interval[float]):
     converter = FloatConverter()
     operator = FloatOperator()
     endtype = float
-
-    def mid(self) -> float:
-        ZERO = self.operator.ZERO
-        INFINITY = self.operator.INFINITY
-
-        if self.inf == -INFINITY:
-            return ZERO if self.sup == INFINITY else self.sup
-
-        if self.sup == INFINITY:
-            return self.inf
-
-        if abs(self.inf) >= 1 and abs(self.sup) >= 1:
-            return self.inf / 2 + self.sup / 2
-
-        return (self.inf + self.sup) / 2
 
     @classmethod
     def __exp_point(cls, x):

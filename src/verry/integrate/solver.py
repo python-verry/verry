@@ -3,9 +3,9 @@ import itertools
 from collections.abc import Callable, Sequence
 from typing import Literal
 
+from verry.integrate import _impl
 from verry.integrate.integrator import IntegratorFactory, kashi
 from verry.integrate.tracker import TrackerFactory, doubleton
-from verry.integrate.utility import seriessol, variationaleq
 from verry.integrate.vareqsolver import VarEqSolverFactory, lognorm
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries
@@ -223,7 +223,7 @@ class C0Solver:
         >>> print(r.status)
         SUCCESS
         >>> print(r.content.y[0])
-        [inf=-1.00001, sup=-0.99999]
+        [inf=-1.00001, sup=-0.999999]
 
         The next example fails due to the blow-up of the solution.
 
@@ -256,15 +256,15 @@ class C0Solver:
 
             u0 = itor.t_prev
             u1 = itor.t
-            varfun = variationaleq(fun, lambda t: tuple(x(t - u0) for x in itor.series))
+            varfun = _impl.variationaleq(fun, u0, itor.series)
             dom = 0 | (u1 - u0)
-            tmp = seriessol(fun, u0, tracker.sample(), itor.order - 1)
+            tmp = _impl.seriessol(fun, u0, tracker.sample(), itor.order - 1)
             tmp = [IntervalSeries(dom, x.coeffs) for x in tmp]
             a1 = intvlmat([x.eval(u1 - u0) for x in tmp])
             jac = eye.empty_like()
 
             for j in range(len(y0)):
-                tmp = seriessol(varfun, u0, list(eye[j]), itor.order - 1)
+                tmp = _impl.seriessol(varfun, u0, list(eye[j]), itor.order - 1)
                 tmp = [IntervalSeries(dom, x.coeffs) for x in tmp]
                 a1[j] += itor.series[j].coeffs[-1] * (u1 - u0) ** itor.order
 
@@ -451,7 +451,7 @@ class C1Solver:
         >>> print(r.status)
         SUCCESS
         >>> print(r.content.y[0])
-        [inf=-1.00001, sup=-0.99999]
+        [inf=-1.00001, sup=-0.999999]
 
         The next example fails due to the blow-up of the solution.
 

@@ -36,7 +36,7 @@ from typing import Any, overload
 import mpmath
 import mpmath.ctx_mp_python
 
-from verry.affine import AffineForm
+from verry.affineform import AffineForm
 from verry.autodiff.autodiff import _defderiv, _primitive
 from verry.interval.interval import Interval
 from verry.intervalseries import IntervalSeries

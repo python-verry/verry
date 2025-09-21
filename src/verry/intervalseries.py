@@ -20,12 +20,11 @@ from collections.abc import Iterable
 from typing import Self, overload
 
 from verry import function as vrf
-from verry.autodiff.dual import Jet, JetLike
 from verry.interval.interval import Interval
 from verry.typing import ComparableScalar, Scalar
 
 
-class IntervalSeries[T: ComparableScalar](JetLike[Interval[T]], Scalar):
+class IntervalSeries[T: ComparableScalar](Scalar):
     """Interval polynomial function.
 
     Parameters
@@ -234,9 +233,6 @@ class IntervalSeries[T: ComparableScalar](JetLike[Interval[T]], Scalar):
         return other.domain == self.domain and other.coeffs == self.coeffs
 
     @overload
-    def __call__(self, arg: Jet[Interval[T]]) -> Jet[Interval[T]]: ...
-
-    @overload
     def __call__(self, arg: Self) -> Self: ...
 
     @overload
@@ -255,19 +251,6 @@ class IntervalSeries[T: ComparableScalar](JetLike[Interval[T]], Scalar):
 
             case self.__class__():
                 return self.compose(arg)
-
-            case Jet():
-                if len(self.coeffs) <= len(arg.coeffs):
-                    raise ValueError
-
-                order = arg.order
-                result = arg.__class__((self.coeffs[order],))
-
-                for x in reversed(self.coeffs[:order]):
-                    result *= arg
-                    result += x
-
-                return result
 
             case _:
                 raise TypeError

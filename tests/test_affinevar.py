@@ -1,4 +1,4 @@
-from verry.affine import AffineForm
+from verry.affineform import AffineForm
 from verry.interval import FloatInterval
 
 

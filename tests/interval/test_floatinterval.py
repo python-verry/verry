@@ -4,8 +4,8 @@ from verry.misc.formatspec import FormatSpec
 
 
 def test_converter():
-    ROUND_CEILING = RoundingMode.ROUND_CEILING
-    ROUND_FLOOR = RoundingMode.ROUND_FLOOR
+    ROUND_CEILING = RoundingMode.CEILING
+    ROUND_FLOOR = RoundingMode.FLOOR
     converter = FloatConverter()
 
     assert converter.fromint(9007199254740993, ROUND_FLOOR) == 9007199254740992.0
