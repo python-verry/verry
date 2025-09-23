@@ -1,0 +1,6 @@
+﻿verry.autodiff.grad
+===================
+
+.. currentmodule:: verry.autodiff
+
+.. autofunction:: grad

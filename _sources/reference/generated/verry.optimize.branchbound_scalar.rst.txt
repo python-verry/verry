@@ -1,0 +1,6 @@
+﻿verry.optimize.branchbound\_scalar
+==================================
+
+.. currentmodule:: verry.optimize
+
+.. autofunction:: branchbound_scalar

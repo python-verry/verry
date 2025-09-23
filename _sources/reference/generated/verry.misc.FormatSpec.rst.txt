@@ -1,0 +1,11 @@
+﻿verry.misc.FormatSpec
+=====================
+
+.. currentmodule:: verry.misc
+
+.. autoclass:: FormatSpec
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

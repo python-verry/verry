@@ -1,0 +1,11 @@
+﻿verry.autodiff.Dual
+===================
+
+.. currentmodule:: verry.autodiff
+
+.. autoclass:: Dual
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

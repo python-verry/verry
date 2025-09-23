@@ -1,0 +1,11 @@
+﻿verry.affineform.AffineForm
+===========================
+
+.. currentmodule:: verry.affineform
+
+.. autoclass:: AffineForm
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

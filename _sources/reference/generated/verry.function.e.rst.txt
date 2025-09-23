@@ -1,0 +1,6 @@
+﻿verry.function.e
+================
+
+.. currentmodule:: verry.function
+
+.. autofunction:: e

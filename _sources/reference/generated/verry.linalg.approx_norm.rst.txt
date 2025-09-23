@@ -1,0 +1,6 @@
+﻿verry.linalg.approx\_norm
+=========================
+
+.. currentmodule:: verry.linalg
+
+.. autofunction:: approx_norm

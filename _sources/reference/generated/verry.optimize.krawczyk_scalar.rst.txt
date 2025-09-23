@@ -1,0 +1,6 @@
+﻿verry.optimize.krawczyk\_scalar
+===============================
+
+.. currentmodule:: verry.optimize
+
+.. autofunction:: krawczyk_scalar

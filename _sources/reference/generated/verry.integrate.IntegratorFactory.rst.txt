@@ -1,0 +1,11 @@
+﻿verry.integrate.IntegratorFactory
+=================================
+
+.. currentmodule:: verry.integrate
+
+.. autoclass:: IntegratorFactory
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

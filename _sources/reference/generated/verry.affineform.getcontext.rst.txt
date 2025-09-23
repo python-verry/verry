@@ -1,0 +1,6 @@
+﻿verry.affineform.getcontext
+===========================
+
+.. currentmodule:: verry.affineform
+
+.. autofunction:: getcontext

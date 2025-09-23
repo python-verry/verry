@@ -1,0 +1,6 @@
+﻿verry.linalg.norm
+=================
+
+.. currentmodule:: verry.linalg
+
+.. autofunction:: norm

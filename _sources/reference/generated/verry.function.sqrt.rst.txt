@@ -1,0 +1,6 @@
+﻿verry.function.sqrt
+===================
+
+.. currentmodule:: verry.function
+
+.. autofunction:: sqrt

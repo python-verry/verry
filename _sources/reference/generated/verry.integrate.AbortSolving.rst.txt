@@ -1,0 +1,6 @@
+﻿verry.integrate.AbortSolving
+============================
+
+.. currentmodule:: verry.integrate
+
+.. autoexception:: AbortSolving

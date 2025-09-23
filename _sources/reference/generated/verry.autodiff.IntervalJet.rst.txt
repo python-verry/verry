@@ -1,0 +1,11 @@
+﻿verry.autodiff.IntervalJet
+==========================
+
+.. currentmodule:: verry.autodiff
+
+.. autoclass:: IntervalJet
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

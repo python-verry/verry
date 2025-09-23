@@ -1,0 +1,11 @@
+﻿verry.autodiff.DynDual
+======================
+
+.. currentmodule:: verry.autodiff
+
+.. autoclass:: DynDual
+    :show-inheritance:
+    :members:
+    :inherited-members:
+    :special-members: __call__
+    :member-order: groupwise

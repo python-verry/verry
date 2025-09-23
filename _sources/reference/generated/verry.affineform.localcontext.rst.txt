@@ -1,0 +1,6 @@
+﻿verry.affineform.localcontext
+=============================
+
+.. currentmodule:: verry.affineform
+
+.. autofunction:: localcontext
