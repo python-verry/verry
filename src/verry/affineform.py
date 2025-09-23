@@ -33,7 +33,7 @@ Context
 import contextlib
 import contextvars
 from collections.abc import Sequence
-from typing import Literal, Never, Self, final
+from typing import Literal, Self, final
 
 from verry import function as vrf
 from verry.interval.interval import Interval
@@ -64,7 +64,9 @@ class Context:
         self._count = 0
 
     def copy(self) -> Self:
-        return self.__class__(self.rounding)
+        result = self.__class__(self.rounding)
+        result._count = self._count
+        return result
 
     def create(self) -> int:
         result = self._count
@@ -145,10 +147,7 @@ class AffineForm[T: ComparableScalar](Scalar):
     _excess: T
     _intvl: type[Interval[T]]
 
-    def __init__(self, value: Interval[T], **kwargs: Never):
-        if kwargs.get("_skipinit", False):
-            return
-
+    def __init__(self, value: Interval[T]):
         if not isinstance(value, Interval):
             raise TypeError
 
@@ -275,7 +274,7 @@ class AffineForm[T: ComparableScalar](Scalar):
         ctx = getcontext()
 
         match rhs:
-            case self._intvl():
+            case self._intvl.endtype() | int() | float():
                 result = self.__class__(self._intvl())
                 tmp = (self._intvl(self._mid) + rhs).midrad()
                 result._mid = tmp[0]
@@ -288,8 +287,8 @@ class AffineForm[T: ComparableScalar](Scalar):
 
                 return result
 
-            case self._intvl.endtype() | int() | float():
-                return self.__add__(self._intvl(rhs))
+            case self._intvl():
+                return self.__add__(self.__class__(rhs))
 
             case self.__class__():
                 result = self.__class__(self._intvl())
@@ -300,6 +299,7 @@ class AffineForm[T: ComparableScalar](Scalar):
 
                 for [key, x] in self._coeffs.items():
                     if (y := rhs._coeffs.get(key)) is None:
+                        result._coeffs[key] = x
                         continue
 
                     tmp = (self._intvl(x) + y).midrad()
@@ -325,7 +325,7 @@ class AffineForm[T: ComparableScalar](Scalar):
         ctx = getcontext()
 
         match rhs:
-            case self._intvl():
+            case self._intvl.endtype() | float() | int():
                 result = self.__class__(self._intvl())
                 tmp = (self._intvl(self._mid) - rhs).midrad()
                 result._mid = tmp[0]
@@ -338,8 +338,8 @@ class AffineForm[T: ComparableScalar](Scalar):
 
                 return result
 
-            case self._intvl.endtype() | int() | float():
-                return self.__add__(self._intvl(rhs))
+            case self._intvl():
+                return self.__sub__(self.__class__(rhs))
 
             case self.__class__():
                 result = self.__class__(self._intvl())
@@ -350,6 +350,7 @@ class AffineForm[T: ComparableScalar](Scalar):
 
                 for [key, x] in self._coeffs.items():
                     if (y := rhs._coeffs.get(key)) is None:
+                        result._coeffs[key] = x
                         continue
 
                     tmp = (self._intvl(x) - y).midrad()
@@ -383,8 +384,8 @@ class AffineForm[T: ComparableScalar](Scalar):
                 result._mid = tmp[0]
                 error = tmp[1]
 
-                for key, coeff in self._coeffs.items():
-                    tmp = (coeff * rhs).midrad()
+                for key, x in self._coeffs.items():
+                    tmp = (x * rhs).midrad()
                     result._coeffs[key] = tmp[0]
                     error = cadd(error, tmp[1])
 
@@ -399,29 +400,41 @@ class AffineForm[T: ComparableScalar](Scalar):
 
                 return result
 
+            case self._intvl():
+                return self.__mul__(self.__class__(rhs))
+
             case self.__class__():
                 result = self.__class__(self._intvl())
                 tmp = self._intvl(self._mid) * rhs._mid
                 result._mid = tmp.mid()
                 error = cadd(cmul(self.rad(), rhs.rad()), tmp.rad())
 
-                for key in set(self._coeffs) | set(rhs._coeffs):
-                    x = self._intvl(self._coeffs.get(key, ZERO))
-                    y = self._intvl(rhs._coeffs.get(key, ZERO))
-                    tmp = x * rhs._mid + self._mid * y
-                    result._coeffs[key] = tmp.mid()
-                    error = cadd(error, tmp.rad())
+                for key, x in self._coeffs.items():
+                    if (y := rhs._coeffs.get(key)) is None:
+                        tmp = (self._intvl(x) * rhs._mid).midrad()
+                        result._coeffs[key] = tmp[0]
+                        error = cadd(error, tmp[1])
+                        continue
 
-                if ctx.rounding == "FAST":
+                    tmp = self._intvl(x) * rhs._mid + self._intvl(self._mid) * y
+                    tmp = tmp.midrad()
+                    result._coeffs[key] = tmp[0]
+                    error = cadd(error, tmp[1])
+
+                for key, y in rhs._coeffs.items():
+                    if self._coeffs.get(key) is None:
+                        tmp = (self._intvl(self._mid) * y).midrad()
+                        result._coeffs[key] = tmp[0]
+                        error = cadd(error, tmp[1])
+
+                if rhs._excess != ZERO:
                     error = cadd(error, cmul(abs(self._mid), rhs._excess))
+
+                if self._excess != ZERO:
                     error = cadd(error, cmul(self._excess, abs(rhs._mid)))
-                    result._excess = ZERO
 
                 result._coeffs[ctx.create()] = error
                 return result
-
-            case self._intvl():
-                return self.__mul__(self.__class__(rhs))
 
             case _:
                 return NotImplemented
@@ -431,11 +444,11 @@ class AffineForm[T: ComparableScalar](Scalar):
             case self._intvl.endtype() | float() | int():
                 return self.__mul__(1 / self._intvl(rhs))
 
-            case self.__class__():
-                return self.__mul__(rhs.reciprocal())
-
             case self._intvl():
                 return self.__mul__(self.__class__(rhs).reciprocal())
+
+            case self.__class__():
+                return self.__mul__(rhs.reciprocal())
 
             case _:
                 return NotImplemented
